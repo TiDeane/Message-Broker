@@ -160,61 +160,6 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     // opened but it remains created
 }
 
-int tfs_sym_link(char const *target, char const *link_name) {
-    inode_t *root = inode_get(ROOT_DIR_INUM);
-
-    // Verifies if the target exists
-    int inum_target = tfs_lookup(target, root);
-    if (inum_target == -1)
-        return -1;
-    
-    // Creates the soft link if it doesn't exist
-    int fhandle_link = tfs_open(link_name, TFS_O_CREAT);
-    if (fhandle_link == -1)
-        return -1; 
-    tfs_close(fhandle_link);
-
-    int inumber_link = tfs_lookup(link_name, root);
-    inode_t *inode_link = inode_get(inumber_link);
-    inode_link->i_data_block = data_block_alloc();
-
-    char *data_block_link = data_block_get(inode_link->i_data_block);
-    size_t path_length = strlen(target);
-
-    if (path_length >= state_block_size())
-        return -1;
-    
-    for (int i = 0; i < path_length; i++)
-        data_block_link[i] = target[i];
-
-    inode_link->is_sym_link = true;
-
-    return 0;
-}
-
-int tfs_link(char const *target, char const *link_name) {
-    inode_t *root = inode_get(ROOT_DIR_INUM);
-    int inumber_target = tfs_lookup(target, root);
-    
-    // Verifies if the target exists
-    if (inumber_target == -1)
-        return -1;
-
-    inode_t* inode_target = inode_get(inumber_target);
-
-    // Cannot create hard link for soft link
-    if (inode_target->is_sym_link == true)
-        return -1;
-
-    if (add_dir_entry(root, link_name + 1, inumber_target) == -1)
-        return -1;
-    
-    // Increases the target's hard link counter
-    inode_target->hl_count++;
-
-    return 0;
-}
-
 int tfs_close(int fhandle) {
     if (pthread_mutex_lock(&g_library_mutex) == -1) {
         WARN("failed to lock mutex: %s", strerror(errno));
@@ -379,37 +324,5 @@ int tfs_unlink(char const *target) {
         return -1;
     }
 
-    return 0;
-}
-
-int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
-    FILE* fd_read = fopen(source_path, "r");
-    if (fd_read == NULL) {
-        return -1;
-    }
-
-    int fhandle_write = tfs_open(dest_path, TFS_O_CREAT | TFS_O_TRUNC);
-    if (fhandle_write == -1) {
-        return -1;
-    }
-
-    char buffer[state_block_size()];
-    memset(buffer, 0, sizeof(buffer));
-
-    // Reads from the outside file and writes into the file inside TFS
-    size_t bytes_read = fread(buffer, sizeof(char), strlen(buffer) + 1, fd_read);
-    while (bytes_read > 0) {
-        if (tfs_write(fhandle_write, buffer, strlen(buffer)) == -1) {
-            tfs_close(fhandle_write);
-            fclose(fd_read);
-            return -1;
-        }    
-        memset(buffer, 0, sizeof(buffer));
-        bytes_read = fread(buffer, sizeof(char), strlen(buffer) + 1, fd_read);
-    }
-
-    if (tfs_close(fhandle_write) == -1 || fclose(fd_read) != 0)
-        return -1;
-    
     return 0;
 }
