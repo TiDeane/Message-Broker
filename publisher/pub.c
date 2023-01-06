@@ -1,5 +1,9 @@
 #include "logging.h"
 
+static int pipe_client;
+static int pipe_server;
+static int session_id;
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
