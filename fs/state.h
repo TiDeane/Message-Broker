@@ -38,7 +38,6 @@ typedef struct {
     // if "mailbox" is not a NULL pointer, then this file is a mailbox, and the
     // inode's data block will store the mailbox's messages
 
-    // in a more complete FS, more fields could exist here
 } inode_t;
 
 typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;
