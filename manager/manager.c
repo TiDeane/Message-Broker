@@ -1,4 +1,10 @@
 #include "logging.h"
+#include "operations.h"
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <string.h>
+ #include <unistd.h>
 
 #define PIPE_STRING_LENGTH (256)
 
@@ -15,6 +21,22 @@ static void print_usage() {
                     "   manager <register_pipe_name> list\n");
 }
 
+// Still unused
+void send_msg(int pipe, char const *msg) {
+    size_t len = strlen(msg);
+    size_t written = 0;
+
+    while (written < len) {
+        ssize_t ret = write(pipe, msg + written, len - written);
+        if (ret < 0) {
+            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        written += (size_t) ret;
+    }
+}
+
 int main(int argc, char **argv) {
  
     if (argc < 4) {
@@ -22,9 +44,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // Remove session pipe if it does exist
+    // Remove session pipe if it exists
     if (unlink(argv[2]) != 0 && errno != ENOENT) {
-        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", FIFO_PATHNAME,
+        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[2],
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -47,7 +69,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    // TODO: sends messages coded 3, 5 or 7 (depending on argv[3]) to the server pipe.
+    // TODO: sends message coded 3, 5 or 7 (depending on argv[3]) to the server pipe.
     // Make function that reads until it finds a "|"? (similar to the IAED airport project)
 
     print_usage();
