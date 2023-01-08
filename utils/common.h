@@ -1,6 +1,10 @@
 #ifndef __UTILS_COMMON_H__
 #define __UTILS_COMMON_H__
 
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include <stdint.h>
 
 /* operation codes */
@@ -15,28 +19,16 @@ enum {
     OP_CODE_LIST_MAILBOX_ANS = 8
 };
 
-// PROTOTYPE
-typedef struct {
-    uint8_t op_code;
-    char *client_pipe_path;
-    char *box_name;
-} message_to_server;
+ /*
+  * Receives an array of strings with the different elements that will compose
+  * the message, and returns a string with the composed message.
+  */
+char *construct_message(char **msg_elements);
 
-// PROTOTYPE
-typedef struct {
-    uint8_t op_code;
-    int32_t return_code;
-    char *error_message;
-} message_to_client;
-
-// PROTOTYPE
-typedef struct {
-    uint8_t op_code;
-    uint8_t last;
-    char *box_name;
-    uint64_t box_size;
-    uint64_t n_publishers;
-    uint64_t n_subscribers;
-} box_list_message;
+ /*
+  * Receives a message and returns an array of strings composed of each element
+  * of the message.
+  */
+//char **deconstruct_message(char *message);
 
 #endif // __UTILS_COMMON_H__
