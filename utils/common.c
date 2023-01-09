@@ -148,8 +148,192 @@ char* construct_message(char **msg_elements) {
 }
 
 /*
+// TODO: USE CONSTANTS FOR THE MALLOC VALUES
+// Constants should be maximum size
+// example: 1 < op_code < 255, so op_code shoud alloc 3+1
 char **deconstruct_message(char *message) {
-    // INCOMPLETE
-    return NULL;
+    uint8_t op_code;
+    char **msg_elements;
+
+    // Note: the first token is the operation code
+    char *token = strtok(message, "|");
+
+    if (isdigit(token[0]) > 0)
+        if (strlen(token) == 2)
+            op_code = (uint8_t) atoi(token);
+        else
+            op_code = (uint8_t) (token[0] - '0');
+    else
+        return NULL;
+
+    switch (op_code) {
+        case 1:
+            msg_elements = malloc(3 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
+            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+            strcpy(msg_elements[2], strtok(NULL, "|"));
+
+            break;
+        case 2:
+            msg_elements = malloc(3 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
+            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+            strcpy(msg_elements[2], strtok(NULL, "|"));
+
+            break;
+        case 3:
+            msg_elements = malloc(3 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
+            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+            strcpy(msg_elements[2], strtok(NULL, "|"));
+
+            break;
+        case 4:
+            msg_elements = malloc(3 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(10+1, sizeof(char)); // return_code
+            msg_elements[2] = calloc(1024+1, sizeof(char)); // error message
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+            strcpy(msg_elements[2], strtok(NULL, "|"));
+
+            break;
+        case 5:
+            msg_elements = malloc(3 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
+            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+            strcpy(msg_elements[2], strtok(NULL, "|"));
+
+            break;
+        case 6:
+            msg_elements = malloc(3 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(10+1, sizeof(char)); // return_code (int32_t)
+            msg_elements[2] = calloc(1024+1, sizeof(char)); // error_message
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+            strcpy(msg_elements[2], strtok(NULL, "|"));
+
+            break;
+        case 7:
+            msg_elements = malloc(2 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+
+            break;
+        case 8:
+            msg_elements = malloc(6 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(1+1, sizeof(char)); // last
+            msg_elements[2] = calloc(32+1, sizeof(char)); // box_name
+            msg_elements[3] = calloc(20+1, sizeof(char)); // box_size
+            msg_elements[4] = calloc(1+1, sizeof(char)); // n_publishers
+            msg_elements[5] = calloc(20+1, sizeof(char)); // n_subscribers
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL
+                || msg_elements[3] == NULL || msg_elements[4] == NULL || msg_elements[5] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+            strcpy(msg_elements[2], strtok(NULL, "|"));
+            strcpy(msg_elements[3], strtok(NULL, "|"));
+            strcpy(msg_elements[4], strtok(NULL, "|"));
+            strcpy(msg_elements[5], strtok(NULL, "|"));
+
+            break;
+        case 9:
+            msg_elements = malloc(2 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(1024+1, sizeof(char)); // message
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+
+            break;
+        case 10:
+            msg_elements = malloc(2 * sizeof(char*));
+            if (msg_elements == NULL)
+                return NULL;
+
+            msg_elements[0] = calloc(2+1, sizeof(char)); // op_code
+            msg_elements[1] = calloc(1024+1, sizeof(char)); // message
+            if (msg_elements[0] == NULL || msg_elements[1] == NULL)
+                return NULL;
+
+            strcpy(msg_elements[0], token);
+            strcpy(msg_elements[1], strtok(NULL, "|"));
+
+            break;
+        default:
+            return NULL;
+    }
+
+    free(message);
+
+    return msg_elements;
 }
 */
