@@ -1,10 +1,12 @@
 #include "common.h"
 
+// Returns NULL in case of error
 char* construct_message(char **msg_elements) {
     uint8_t op_code;
 
-    // 4 : "op_code[2]|"
-    char *message = malloc(4 * sizeof(char));
+    char *message = malloc((OP_CODE_SIZE + 1) * sizeof(char));
+    if (message == NULL)
+        return NULL;
 
     // There are always at least 2 arguments
     strcat(message, msg_elements[0]);
@@ -22,94 +24,94 @@ char* construct_message(char **msg_elements) {
     // This assumes message structure is correct
     switch (op_code) {
         case 1:
-            // 292 : "op_code[1]|client_pipe_path[256]|box_name[32]"
-            temp = realloc(message, 292 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_1_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
             strcat(message, "|");
             strcat(message, msg_elements[2]);
 
             break;
         case 2:
-            // 292 : "op_code[1]|client_pipe_path[256]|box_name[32]"
-            temp = realloc(message, 292 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_2_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
             strcat(message, "|");
             strcat(message, msg_elements[2]);
             
             break;
         case 3:
-            // 292 : "op_code[1]|client_pipe_path[256]|box_name[32]"
-            temp = realloc(message, 292 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_3_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
             strcat(message, "|");
             strcat(message, msg_elements[2]);
             
             break;
         case 4: 
-            // 1037 : "op_code[1]|return_code[10]|error_message[1024]"
-            temp = realloc(message, 1037 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_4_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
             strcat(message, "|");
             strcat(message, msg_elements[2]);
             
             break;
         case 5:
-            // 292 : "op_code[1]|client_pipe_path[256]|box_name[32]"
-            temp = realloc(message, 292 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_5_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
             strcat(message, "|");
             strcat(message, msg_elements[2]);
             
             break;
         case 6:
-            // 1037 : "op_code[1]|return_code[10]|error_message[1024]"
-            temp = realloc(message, 1037 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_6_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
             strcat(message, "|");
             strcat(message, msg_elements[2]);
             
             break;
         case 7:
-            // 259 : "op_code[1]|client_pipe_path[256]"
-            temp = realloc(message, 259 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_7_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
 
             break;
         case 8:
-            // 81 : "op_code[1]|last[1]|box_name[32]|box_size[20]|n_publishers[1]|n_subscribers[20]"
-            temp = realloc(message, 81 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_8_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
             strcat(message, "|");
             strcat(message, msg_elements[2]);
@@ -122,22 +124,22 @@ char* construct_message(char **msg_elements) {
 
             break;
         case 9:
-            // 1027 : "op_code[1]|message [1024]"
-            temp = realloc(message, 1027 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_9_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
 
             break;
         case 10:
-            // 1028 : "op_code[2]|message [1024]"
-            temp = realloc(message, 1028 * sizeof(char));
+            temp = realloc(message, (MESSAGE_CODE_10_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
             else
                 return NULL;
+
             strcat(message, msg_elements[1]);
 
             break;
@@ -147,10 +149,7 @@ char* construct_message(char **msg_elements) {
     return message;
 }
 
-/*
-// TODO: USE CONSTANTS FOR THE MALLOC VALUES
-// Constants should be maximum size
-// example: 1 < op_code < 255, so op_code shoud alloc 3+1
+// Returns NULL in case of error
 char **deconstruct_message(char *message) {
     uint8_t op_code;
     char **msg_elements;
@@ -172,9 +171,9 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
-            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(CLIENT_PIPE_PATH_SIZE + 1, sizeof(char));
+            msg_elements[2] = calloc(BOX_NAME_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
                 return NULL;
 
@@ -188,9 +187,9 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
-            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(CLIENT_PIPE_PATH_SIZE + 1, sizeof(char));
+            msg_elements[2] = calloc(BOX_NAME_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
                 return NULL;
 
@@ -204,9 +203,9 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
-            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(CLIENT_PIPE_PATH_SIZE + 1, sizeof(char));
+            msg_elements[2] = calloc(BOX_NAME_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
                 return NULL;
 
@@ -220,9 +219,9 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(10+1, sizeof(char)); // return_code
-            msg_elements[2] = calloc(1024+1, sizeof(char)); // error message
+            msg_elements[0] = calloc(OP_CODE_SIZE+1, sizeof(char));
+            msg_elements[1] = calloc(RETURN_CODE_SIZE+1, sizeof(char));
+            msg_elements[2] = calloc(ERROR_MESSAGE_SIZE+1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
                 return NULL;
 
@@ -236,9 +235,9 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
-            msg_elements[2] = calloc(32+1, sizeof(char)); // box_size
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(CLIENT_PIPE_PATH_SIZE + 1, sizeof(char));
+            msg_elements[2] = calloc(BOX_NAME_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
                 return NULL;
 
@@ -252,9 +251,9 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(10+1, sizeof(char)); // return_code (int32_t)
-            msg_elements[2] = calloc(1024+1, sizeof(char)); // error_message
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(RETURN_CODE_SIZE + 1, sizeof(char));
+            msg_elements[2] = calloc(ERROR_MESSAGE_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL)
                 return NULL;
 
@@ -268,8 +267,8 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(256+1, sizeof(char)); // client_pipe_path
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(CLIENT_PIPE_PATH_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL)
                 return NULL;
 
@@ -282,12 +281,12 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(1+1, sizeof(char)); // last
-            msg_elements[2] = calloc(32+1, sizeof(char)); // box_name
-            msg_elements[3] = calloc(20+1, sizeof(char)); // box_size
-            msg_elements[4] = calloc(1+1, sizeof(char)); // n_publishers
-            msg_elements[5] = calloc(20+1, sizeof(char)); // n_subscribers
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(LAST_BYTE_SIZE + 1, sizeof(char));
+            msg_elements[2] = calloc(BOX_NAME_SIZE + 1, sizeof(char));
+            msg_elements[3] = calloc(BOX_BYTES_SIZE + 1, sizeof(char));
+            msg_elements[4] = calloc(N_PUBLISHERS_SIZE + 1, sizeof(char));
+            msg_elements[5] = calloc(N_SUBSCRIBERS_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL || msg_elements[2] == NULL
                 || msg_elements[3] == NULL || msg_elements[4] == NULL || msg_elements[5] == NULL)
                 return NULL;
@@ -305,8 +304,8 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(1+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(1024+1, sizeof(char)); // message
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(MESSAGE_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL)
                 return NULL;
 
@@ -319,8 +318,8 @@ char **deconstruct_message(char *message) {
             if (msg_elements == NULL)
                 return NULL;
 
-            msg_elements[0] = calloc(2+1, sizeof(char)); // op_code
-            msg_elements[1] = calloc(1024+1, sizeof(char)); // message
+            msg_elements[0] = calloc(OP_CODE_SIZE + 1, sizeof(char));
+            msg_elements[1] = calloc(MESSAGE_SIZE + 1, sizeof(char));
             if (msg_elements[0] == NULL || msg_elements[1] == NULL)
                 return NULL;
 
@@ -336,4 +335,3 @@ char **deconstruct_message(char *message) {
 
     return msg_elements;
 }
-*/
