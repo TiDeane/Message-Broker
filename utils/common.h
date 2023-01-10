@@ -42,7 +42,9 @@ enum {
     OP_CODE_RM_MAILBOX = 5,
     OP_CODE_RM_MAILBOX_ANS = 6,
     OP_CODE_LIST_MAILBOX = 7,
-    OP_CODE_LIST_MAILBOX_ANS = 8
+    OP_CODE_LIST_MAILBOX_ANS = 8,
+    OP_CODE_PUBLISHER_SERVER_MESSAGE = 9,
+    OP_CODE_SERVER_PUBLISHER_MESSAGE = 10
 };
 
 // USE THE CONSTANTS ABOVE FOR THE SWITCH CASES
@@ -58,6 +60,6 @@ char *construct_message(char **msg_elements);
   * Receives a message and returns an array of strings composed of each element
   * of the message.
   */
-//char **deconstruct_message(char *message);
+char **deconstruct_message(char *message);
 
 #endif // __UTILS_COMMON_H__

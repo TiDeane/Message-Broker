@@ -23,7 +23,7 @@ char* construct_message(char **msg_elements) {
     char *temp;
     // This assumes message structure is correct
     switch (op_code) {
-        case 1:
+        case OP_CODE_REG_PUBLISHER:
             temp = realloc(message, (MESSAGE_CODE_1_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -35,7 +35,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[2]);
 
             break;
-        case 2:
+        case OP_CODE_REG_SUBSCRIBER:
             temp = realloc(message, (MESSAGE_CODE_2_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -47,7 +47,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[2]);
             
             break;
-        case 3:
+        case OP_CODE_CREAT_MAILBOX:
             temp = realloc(message, (MESSAGE_CODE_3_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -59,7 +59,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[2]);
             
             break;
-        case 4: 
+        case OP_CODE_CREAT_MAILBOX_ANS:
             temp = realloc(message, (MESSAGE_CODE_4_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -71,7 +71,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[2]);
             
             break;
-        case 5:
+        case OP_CODE_RM_MAILBOX:
             temp = realloc(message, (MESSAGE_CODE_5_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -83,7 +83,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[2]);
             
             break;
-        case 6:
+        case OP_CODE_RM_MAILBOX_ANS:
             temp = realloc(message, (MESSAGE_CODE_6_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -95,7 +95,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[2]);
             
             break;
-        case 7:
+        case OP_CODE_LIST_MAILBOX:
             temp = realloc(message, (MESSAGE_CODE_7_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -105,7 +105,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[1]);
 
             break;
-        case 8:
+        case OP_CODE_LIST_MAILBOX_ANS:
             temp = realloc(message, (MESSAGE_CODE_8_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -123,7 +123,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[5]);
 
             break;
-        case 9:
+        case OP_CODE_PUBLISHER_SERVER_MESSAGE:
             temp = realloc(message, (MESSAGE_CODE_9_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -133,7 +133,7 @@ char* construct_message(char **msg_elements) {
             strcat(message, msg_elements[1]);
 
             break;
-        case 10:
+        case OP_CODE_SERVER_PUBLISHER_MESSAGE:
             temp = realloc(message, (MESSAGE_CODE_10_SIZE + 1) * sizeof(char));
             if (temp != NULL)
                 message = temp;
@@ -166,7 +166,7 @@ char **deconstruct_message(char *message) {
         return NULL;
 
     switch (op_code) {
-        case 1:
+        case OP_CODE_REG_PUBLISHER:
             msg_elements = malloc(3 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -182,7 +182,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[2], strtok(NULL, "|"));
 
             break;
-        case 2:
+        case OP_CODE_REG_SUBSCRIBER:
             msg_elements = malloc(3 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -198,7 +198,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[2], strtok(NULL, "|"));
 
             break;
-        case 3:
+        case OP_CODE_CREAT_MAILBOX:
             msg_elements = malloc(3 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -214,7 +214,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[2], strtok(NULL, "|"));
 
             break;
-        case 4:
+        case OP_CODE_CREAT_MAILBOX_ANS:
             msg_elements = malloc(3 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -230,7 +230,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[2], strtok(NULL, "|"));
 
             break;
-        case 5:
+        case OP_CODE_RM_MAILBOX:
             msg_elements = malloc(3 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -246,7 +246,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[2], strtok(NULL, "|"));
 
             break;
-        case 6:
+        case OP_CODE_RM_MAILBOX_ANS:
             msg_elements = malloc(3 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -262,7 +262,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[2], strtok(NULL, "|"));
 
             break;
-        case 7:
+        case OP_CODE_LIST_MAILBOX:
             msg_elements = malloc(2 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -276,7 +276,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[1], strtok(NULL, "|"));
 
             break;
-        case 8:
+        case OP_CODE_LIST_MAILBOX_ANS:
             msg_elements = malloc(6 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -299,7 +299,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[5], strtok(NULL, "|"));
 
             break;
-        case 9:
+        case OP_CODE_PUBLISHER_SERVER_MESSAGE:
             msg_elements = malloc(2 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
@@ -313,7 +313,7 @@ char **deconstruct_message(char *message) {
             strcpy(msg_elements[1], strtok(NULL, "|"));
 
             break;
-        case 10:
+        case OP_CODE_SERVER_PUBLISHER_MESSAGE:
             msg_elements = malloc(2 * sizeof(char*));
             if (msg_elements == NULL)
                 return NULL;
