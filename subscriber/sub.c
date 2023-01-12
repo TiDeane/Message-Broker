@@ -14,9 +14,10 @@ static int pipe_server;
 
 static char subscriber_pipe_path[PIPE_STRING_LENGTH] = {0};
 static char server_pipe_path[PIPE_STRING_LENGTH] = {0};
+static char box_name[BOX_NAME_SIZE] = {0};
 
-char message[MESSAGE_SIZE] = {0};
-
+request reqRegistry;
+response respMessage;
 
 static void sig_handler(int sig) {
   static int count = 0;
@@ -41,21 +42,6 @@ static void sig_handler(int sig) {
   exit(EXIT_SUCCESS);
 }
 
-void send_msg(int pipe, char const *msg) {
-    size_t len = strlen(msg);
-    size_t written = 0;
-
-    while (written < len) {
-        ssize_t ret = write(pipe, msg + written, len - written);
-        if (ret < 0) {
-            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        written += (size_t) ret;
-    }
-}
-
 int main(int argc, char **argv) {
     
     if (signal(SIGINT, sig_handler) == SIG_ERR) {
@@ -72,6 +58,7 @@ int main(int argc, char **argv) {
 
     strcpy(server_pipe_path, argv[1]);
     strcpy(subscriber_pipe_path, argv[2]);
+    strcpy(box_name, argv[3]);
 
     // Remove session pipe if it exists
     if (unlink(subscriber_pipe_path) != 0 && errno != ENOENT) {
@@ -86,34 +73,11 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    // Registry
+    // Request Registry
     {
-        char **reg_elements = malloc (3 * sizeof(char*));
-        if (reg_elements == NULL) {
-            unlink(subscriber_pipe_path);
-            close(pipe_server);
-            return 1;
-        }
-
-        reg_elements[0] = malloc(2);
-        reg_elements[1] = malloc(256);
-        reg_elements[2] = malloc(32);
-
-        if (reg_elements[0] == NULL || reg_elements[1] == NULL ||
-            reg_elements[2] == NULL) {
-            unlink(subscriber_pipe_path);
-            close(pipe_server);
-            return 1;
-        }
-
-        strcpy(reg_elements[0], "2");
-        strcpy(reg_elements[1], argv[2]);
-        strcpy(reg_elements[2], argv[3]);
-
-        // Constructs the message that is going to be sent to the server
-        char *registry = construct_message(reg_elements);
-        if (message == NULL)
-        return 1;
+        reqRegistry.op_code = 2;
+        strcpy(reqRegistry.u_client_pipe_path.client_pipe_path, subscriber_pipe_path);
+        strcpy(reqRegistry.u_box_name.box_name, box_name);
 
         // Opens the server pipe for writing to request permission for a new session
         // This waits for the server to open it for reading 
@@ -121,20 +85,15 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        send_msg(pipe_server, registry);
+        if (write(pipe_server, &reqRegistry, sizeof(request)) != sizeof(request)) {
+            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
         close(pipe_server);
     }
 
     // Read Messages
     { 
-        char **msg_elements = malloc (2 * sizeof(char*));
-        if (msg_elements == NULL) {
-            unlink(subscriber_pipe_path);
-            close(pipe_server);
-            return 1;
-        }
-        msg_elements[0] = malloc(2);
-        msg_elements[1] = malloc(1024);
 
         for (;;) {
             // Opens subscriber pipe to read messages sent by the server
@@ -144,15 +103,17 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
             // char buffer[MAX_CODE_10_SIZE];
-            ssize_t ret = read(pipe_subscriber, message, MESSAGE_SIZE - 1);
+            if (read(pipe_subscriber, &respMessage, sizeof(response)) != sizeof(response)) {
+                fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            ssize_t ret = respMessage.u_response_message.message;
             if (ret == 0) {
                 // ret == 0 indicates EOF
-                unlink(subscriber_pipe_path);
                 fprintf(stderr, "[INFO]: pipe closed\n");
                 return 0;
             } else if (ret == -1) {
                 // ret == -1 indicates error
-                unlink(subscriber_pipe_path);
                 fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
@@ -161,11 +122,12 @@ int main(int argc, char **argv) {
             // char **msg_elements = deconstruct_message(buffer);
 
             fprintf(stderr, "[INFO]: received %zd B\n", ret);
-            message[ret] = 0;
-            fprintf(stdout, "%s\n", message);
+            respMessage.u_response_message.message[ret] = 0;
+            fprintf(stdout, "%s\n", respMessage.u_response_message.message);
             close(pipe_subscriber);
         }
     }
+    unlink(subscriber_pipe_path);
 
     return 0;
 }
