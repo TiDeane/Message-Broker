@@ -13,8 +13,12 @@ static int pipe_server;
 
 static char publisher_pipe_path[PIPE_STRING_LENGTH] = {0};
 static char server_pipe_path[PIPE_STRING_LENGTH] = {0};
+static char box_name[BOX_NAME_SIZE] = {0};
 
+request reqRegistry;
+request reqMessage;
 
+// Unused
 void send_msg(int pipe, char const *msg) {
     size_t len = strlen(msg);
     size_t written = 0;
@@ -39,6 +43,7 @@ int main(int argc, char **argv) {
 
     strcpy(server_pipe_path, argv[1]);
     strcpy(publisher_pipe_path, argv[2]);
+    strcpy(box_name, argv[3]);
 
     // Remove session pipe if it exists
     if (unlink(publisher_pipe_path) != 0 && errno != ENOENT) {
@@ -53,34 +58,11 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    // Registry
+    // Request Registry 
     {
-        char **reg_elements = malloc (3 * sizeof(char*));
-        if (reg_elements == NULL) {
-            unlink(publisher_pipe_path);
-            close(pipe_server);
-            return 1;
-        }
-
-        reg_elements[0] = malloc(2);
-        reg_elements[1] = malloc(256);
-        reg_elements[2] = malloc(32);
-
-        if (reg_elements[0] == NULL || reg_elements[1] == NULL ||
-            reg_elements[2] == NULL) {
-            unlink(publisher_pipe_path);
-            close(pipe_server);
-            return 1;
-        }
-
-        strcpy(reg_elements[0], "1");
-        strcpy(reg_elements[1], argv[2]);
-        strcpy(reg_elements[2], argv[3]);
-
-        // Constructs the message that is going to be sent to the server
-        char *registry = construct_message(reg_elements);
-        if (registry == NULL)
-        return 1;
+        reqRegistry.op_code = 1;
+        strcpy(reqRegistry.u_client_pipe_path.client_pipe_path,publisher_pipe_path);
+        strcpy(reqRegistry.u_box_name.box_name,box_name);
 
         // Opens the server pipe for writing to request permission for a new session
         // This waits for the server to open it for reading 
@@ -88,28 +70,22 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        send_msg(pipe_server, registry);
+        if (write(pipe_server, &reqRegistry, sizeof(request)) != sizeof(request)) {
+            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
         close(pipe_server);
     }
 
-    // Write Messages
+    // Request to Write Messages
     { 
-        char **pub_elements = malloc (2 * sizeof(char*));
-        if (pub_elements == NULL) {
-            unlink(publisher_pipe_path);
-            close(pipe_server);
-            return 1;
-        }
-        pub_elements[0] = malloc(2);
-        pub_elements[1] = malloc(1024);
-        
-        char *message = malloc (MESSAGE_SIZE * sizeof(char*));
-        
+        reqMessage.op_code = 9;
+        char *message = malloc(1024);
         for(;;) {
             fprintf(stdout,"Enter message: ");
             ssize_t ret = fscanf(stdin,"%1023[^\n]", message);
             fprintf(stderr, "[INFO]: received %zd B\n", ret);
-
+            strcpy(reqMessage.u_publisher_message.message,message);
             if (ret == 0) {
                 // ret == 0 indicates EOF
                 unlink(publisher_pipe_path);
@@ -122,19 +98,16 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
 
-            strcpy(pub_elements[0], "9");
-            strcpy(pub_elements[1], message);
-            char *publication = construct_message(pub_elements);
-            if (publication == NULL)
-                return 1;
-
             // Opens publisher pipe to write messages
             // This waits for the server to open it for reading
-            if ((pipe_publisher = open(publisher_pipe_path, O_WRONLY)) == -1) {
+            if ((pipe_publisher = open(server_pipe_path, O_WRONLY)) == -1) {
                 fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
-            send_msg(pipe_publisher, publication);
+            if (write(pipe_server, &reqMessage, sizeof(request)) != sizeof(request)) {
+                fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+                exit(EXIT_FAILURE);
+            }
             close(pipe_publisher);
         }
     }
