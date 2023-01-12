@@ -6,15 +6,16 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <stdbool.h>
 
 #define PIPE_STRING_LENGTH (256)
 
 static int pipe_subscriber;
 static int pipe_server;
 
-static char subscriber_pipe_path[PIPE_STRING_LENGTH] = {0};
-static char server_pipe_path[PIPE_STRING_LENGTH] = {0};
-static char box_name[BOX_NAME_SIZE] = {0};
+static char *subscriber_pipe_path;
+static char *server_pipe_path;
+static char *box_name;
 
 request reqRegistry;
 response respMessage;
@@ -29,6 +30,7 @@ static void sig_handler(int sig) {
     // to SIG_DFL (the default action associated with the signal).
     // So we set the signal handler back to our function after each trap.
     //
+    unlink(subscriber_pipe_path);
     if (signal(SIGINT, sig_handler) == SIG_ERR) {
       exit(EXIT_FAILURE);
     }
@@ -41,6 +43,7 @@ static void sig_handler(int sig) {
   fprintf(stderr, "Caught SIGQUIT - that's all folks!\n");
   exit(EXIT_SUCCESS);
 }
+
 
 int main(int argc, char **argv) {
     
@@ -56,9 +59,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    strcpy(server_pipe_path, argv[1]);
-    strcpy(subscriber_pipe_path, argv[2]);
-    strcpy(box_name, argv[3]);
+    server_pipe_path = argv[1];
+    subscriber_pipe_path = argv[2];
+    box_name = argv[3];
 
     // Remove session pipe if it exists
     if (unlink(subscriber_pipe_path) != 0 && errno != ENOENT) {
@@ -92,7 +95,7 @@ int main(int argc, char **argv) {
         close(pipe_server);
     }
 
-    // Read Messages
+    // Read Response Messages
     { 
 
         for (;;) {
@@ -107,22 +110,15 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
-            ssize_t ret = respMessage.u_response_message.message;
-            if (ret == 0) {
-                // ret == 0 indicates EOF
-                fprintf(stderr, "[INFO]: pipe closed\n");
-                return 0;
-            } else if (ret == -1) {
+            ssize_t ret = sizeof(respMessage.u_response_message.message);
+
+            if (ret == -1) {
                 // ret == -1 indicates error
                 fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
 
-            // Deconstructs the answer sent by the server
-            // char **msg_elements = deconstruct_message(buffer);
-
             fprintf(stderr, "[INFO]: received %zd B\n", ret);
-            respMessage.u_response_message.message[ret] = 0;
             fprintf(stdout, "%s\n", respMessage.u_response_message.message);
             close(pipe_subscriber);
         }
