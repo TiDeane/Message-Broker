@@ -11,28 +11,11 @@
 static int pipe_publisher;
 static int pipe_server;
 
-static char publisher_pipe_path[PIPE_STRING_LENGTH] = {0};
-static char server_pipe_path[PIPE_STRING_LENGTH] = {0};
-static char box_name[BOX_NAME_SIZE] = {0};
+static char *publisher_pipe_path;
+static char *server_pipe_path;
+static char *box_name;
 
-request reqRegistry;
-request reqMessage;
-
-// Unused
-void send_msg(int pipe, char const *msg) {
-    size_t len = strlen(msg);
-    size_t written = 0;
-
-    while (written < len) {
-        ssize_t ret = write(pipe, msg + written, len - written);
-        if (ret < 0) {
-            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        written += (size_t) ret;
-    }
-}
+request req;
 
 int main(int argc, char **argv) {
 
@@ -41,9 +24,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    strcpy(server_pipe_path, argv[1]);
-    strcpy(publisher_pipe_path, argv[2]);
-    strcpy(box_name, argv[3]);
+    server_pipe_path = argv[1];
+    publisher_pipe_path = argv[2];
+    box_name = argv[3];
 
     // Remove session pipe if it exists
     if (unlink(publisher_pipe_path) != 0 && errno != ENOENT) {
@@ -60,9 +43,9 @@ int main(int argc, char **argv) {
 
     // Request Registry 
     {
-        reqRegistry.op_code = 1;
-        strcpy(reqRegistry.u_client_pipe_path.client_pipe_path,publisher_pipe_path);
-        strcpy(reqRegistry.u_box_name.box_name,box_name);
+        req.op_code = 1;
+        strcpy(req.u_client_pipe_path.client_pipe_path,publisher_pipe_path);
+        strcpy(req.u_box_name.box_name,box_name);
 
         // Opens the server pipe for writing to request permission for a new session
         // This waits for the server to open it for reading 
@@ -70,7 +53,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        if (write(pipe_server, &reqRegistry, sizeof(request)) != sizeof(request)) {
+        if (write(pipe_server, &req, sizeof(request)) != sizeof(request)) {
             fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
@@ -79,13 +62,15 @@ int main(int argc, char **argv) {
 
     // Request to Write Messages
     { 
-        reqMessage.op_code = 9;
+        req.op_code = 9;
+        memset(req.u_box_name.box_name,'\0',BOX_NAME_SIZE);
         char *message = malloc(1024);
+
         for(;;) {
             fprintf(stdout,"Enter message: ");
             ssize_t ret = fscanf(stdin,"%1023[^\n]", message);
             fprintf(stderr, "[INFO]: received %zd B\n", ret);
-            strcpy(reqMessage.u_publisher_message.message,message);
+            strcpy(req.u_publisher_message.message,message);
             if (ret == 0) {
                 // ret == 0 indicates EOF
                 unlink(publisher_pipe_path);
@@ -104,7 +89,7 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
-            if (write(pipe_server, &reqMessage, sizeof(request)) != sizeof(request)) {
+            if (write(pipe_server, &req, sizeof(request)) != sizeof(request)) {
                 fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
