@@ -2,36 +2,20 @@
 #define __UTILS_COMMON_H__
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
-#include <ctype.h>
+#include <string.h>
 #include <stdint.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
+#include <stdbool.h>
 
 /* MAX LENGTH OF DIFFERENT MESSAGE ELEMENTS */
-#define OP_CODE_SIZE 3 // uint8_t : 0 to 255
-#define CLIENT_PIPE_PATH_SIZE 256
-#define BOX_NAME_SIZE 32
-#define RETURN_CODE_SIZE 10 // int32_t : -2,147,483,648 to 2,147,483,647
-#define ERROR_MESSAGE_SIZE 1024
-#define LAST_BYTE_SIZE 3 // uint64_t : 0 to 255
-#define BOX_BYTES_SIZE 20 // uint64_t : 0 to 18,446,744,073,709,551,615
-#define N_PUBLISHERS_SIZE 20 // uint64_t : 0 to 18,446,744,073,709,551,615
-#define N_SUBSCRIBERS_SIZE 20 // uint64_t : 0 to 18,446,744,073,709,551,615
-#define MESSAGE_SIZE 1024
-#define MAX_ANSWER_SIZE (OP_CODE_SIZE + RETURN_CODE_SIZE + ERROR_MESSAGE_SIZE + 2)
-
-/* Max size of each message */
-/* Note: the additional added numbers are for the "|" separators */
-#define MESSAGE_CODE_1_SIZE (OP_CODE_SIZE + CLIENT_PIPE_PATH_SIZE + BOX_NAME_SIZE + 2)
-#define MESSAGE_CODE_2_SIZE (OP_CODE_SIZE + CLIENT_PIPE_PATH_SIZE + BOX_NAME_SIZE + 2)
-#define MESSAGE_CODE_3_SIZE (OP_CODE_SIZE + CLIENT_PIPE_PATH_SIZE + BOX_NAME_SIZE + 2)
-#define MESSAGE_CODE_4_SIZE (OP_CODE_SIZE + RETURN_CODE_SIZE + ERROR_MESSAGE_SIZE + 2)
-#define MESSAGE_CODE_5_SIZE (OP_CODE_SIZE + CLIENT_PIPE_PATH_SIZE + BOX_NAME_SIZE + 2)
-#define MESSAGE_CODE_6_SIZE (OP_CODE_SIZE + RETURN_CODE_SIZE + ERROR_MESSAGE_SIZE + 2)
-#define MESSAGE_CODE_7_SIZE (OP_CODE_SIZE + CLIENT_PIPE_PATH_SIZE + 1)
-#define MESSAGE_CODE_8_SIZE (OP_CODE_SIZE + LAST_BYTE_SIZE + BOX_NAME_SIZE + N_PUBLISHERS_SIZE + N_SUBSCRIBERS_SIZE + 4)
-#define MESSAGE_CODE_9_SIZE (OP_CODE_SIZE + MESSAGE_SIZE + 1)
-#define MESSAGE_CODE_10_SIZE (OP_CODE_SIZE + MESSAGE_SIZE + 1)
+#define CLIENT_PIPE_PATH_SIZE (256)
+#define BOX_NAME_SIZE (32)
+#define ERROR_MESSAGE_SIZE (1024)
+#define MESSAGE_SIZE (1024)
 
 /* Operation codes */
 enum {
@@ -47,19 +31,55 @@ enum {
     OP_CODE_SERVER_PUBLISHER_MESSAGE = 10
 };
 
-// USE THE CONSTANTS ABOVE FOR THE SWITCH CASES
-// MAKE CONSTANTS FOR THE SIZE OF MESSAGE ELEMENTS
+typedef struct {
+    uint8_t last;
+    char box_name[BOX_NAME_SIZE];
+    uint64_t box_size;
+    uint64_t n_publishers;
+    uint64_t n_subscribers;
+} box_listing;
 
- /*
-  * Receives an array of strings with the different elements that will compose
-  * the message, and returns a string with the composed message.
-  */
-char *construct_message(char **msg_elements);
+typedef struct {                    /* Request (client --> server) */
+    uint8_t op_code;                /* Operation code */
 
- /*
-  * Receives a message and returns an array of strings composed of each element
-  * of the message.
-  */
-char **deconstruct_message(char *message);
+    union {
+        char client_pipe_path[CLIENT_PIPE_PATH_SIZE]; /* op_code 1, 2, 3, 5 or 7 */
+        struct {};                                    /* op_code 9 */
+    } u_client_pipe_path;
+
+    union {
+        char box_name[BOX_NAME_SIZE];           /* op_code 1, 2, 3 or 5 */
+        struct {};                              /* op_code 7 or 9 */
+    } u_box_name;
+
+    union {
+        char message[MESSAGE_SIZE];             /* op_code 9 */
+        struct {};                              /* op_code 1, 2, 3, 5 or 7 */
+    } u_publisher_message;
+} request;
+
+typedef struct {                                /* Response (server --> client) */
+    uint8_t op_code;                            /* Operation code */
+
+    union {
+        char message[MESSAGE_SIZE];             /* op_code 9 or 10 */
+        char error_message[ERROR_MESSAGE_SIZE]; /* op_code 4 or 6 */
+        struct {};                              /* op_code 8 */
+    } u_response_message;
+
+    union {
+        int32_t return_code;                    /* op_code 4 or 6*/
+        struct {};                              /* op_code 8, 9 or 10 */
+    } u_return_code;
+
+    union {
+        box_listing box_listing;                /* op_code 8 */
+        struct {};                              /* op_code 4, 6, 9 or 10 */
+    } u_box_listing;
+} response;
+
+// Helper function to send messages
+// Retries to send whatever was not sent in the beginning
+void send_msg(int pipe, char const *msg);
 
 #endif // __UTILS_COMMON_H__

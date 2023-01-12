@@ -1,41 +1,15 @@
 #include "logging.h"
 #include "operations.h"
 #include "common.h"
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
-
-#define PIPE_STRING_LENGTH (256)
 
 static int pipe_client;
 static int pipe_server;
 
-static char client_pipe_path[PIPE_STRING_LENGTH] = {0};
+static char client_pipe_path[CLIENT_PIPE_PATH_SIZE] = {0};
+static char *server_pipe_path;
 
-static void print_usage() {
-    fprintf(stderr, "usage: \n"
-                    "   manager <register_pipe_name> create <box_name>\n"
-                    "   manager <register_pipe_name> remove <box_name>\n"
-                    "   manager <register_pipe_name> list\n");
-}
-
-// Still unused
-void send_msg(int pipe, char const *msg) {
-    size_t len = strlen(msg);
-    size_t written = 0;
-
-    while (written < len) {
-        ssize_t ret = write(pipe, msg + written, len - written);
-        if (ret < 0) {
-            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        written += (size_t) ret;
-    }
-}
+request req;
+response resp;
 
 int main(int argc, char **argv) {
  
@@ -44,135 +18,113 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    server_pipe_path = argv[1];
     strcpy(client_pipe_path, argv[2]);
 
     // Remove session pipe if it exists
     if (unlink(client_pipe_path) != 0 && errno != ENOENT) {
-        fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[2],
+        fprintf(stderr, "[ERR]: manager unlink(%s) failed: %s\n", argv[2],
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Creates the new session's named pipe
     if (mkfifo(client_pipe_path, 0640) != 0) {
-        fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ERR]: manager mkfifo failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Opens the server pipe for writing to request permission for a new session
     // This waits for the server to open it for reading 
-    if ((pipe_server = open(argv[1], O_WRONLY)) == -1) {
-        fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+    if ((pipe_server = open(server_pipe_path, O_WRONLY)) == -1) {
+        fprintf(stderr, "[ERR]: manager open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
-    }
-    
-    // The following code makes an array of strings with the elements
-    // argv[1], argv[2] and argv[4] (excluding argv[4] if argc = 4)
-    char **msg_elements = malloc (3 * sizeof(char*));
-    if (msg_elements == NULL) {
-        unlink(client_pipe_path);
-        close(pipe_server);
-        return 1;
-    }
-
-    msg_elements[0] = malloc(2);
-    msg_elements[1] = malloc(256);
-    if (msg_elements[0] == NULL || msg_elements[1] == NULL) {
-        unlink(client_pipe_path);
-        close(pipe_server);
-        return 1;
     }
 
     if (strcmp(argv[3], "create") && argc == 5) {
-        msg_elements[2] = malloc(32);
-
-        strcpy(msg_elements[0], "3");
-        strcpy(msg_elements[1], argv[2]);
-        strcpy(msg_elements[2], argv[4]);
-
+        req.op_code = 3;
+        strcpy(req.u_client_pipe_path.client_pipe_path, client_pipe_path);
+        strcpy(req.u_box_name.box_name, argv[4]);
     } else if (strcmp(argv[3], "remove") && argc == 5) {
-        msg_elements[2] = malloc(32);
-
-        strcpy(msg_elements[0], "5");
-        strcpy(msg_elements[1], argv[2]);
-        strcpy(msg_elements[2], argv[4]);
-        
+        req.op_code = 5;
+        strcpy(req.u_client_pipe_path.client_pipe_path, client_pipe_path);
+        strcpy(req.u_box_name.box_name, argv[4]);
     } else if (strcmp(argv[3], "list") && argc == 4) {
-        char **temp = realloc(msg_elements, 2 * sizeof(char*));
-        if (temp != NULL)
-            msg_elements = temp;
-        else {
-            unlink(client_pipe_path);
-            close(pipe_server);
-            return 1;
-        }
-        
-        strcpy(msg_elements[0], "7");
-        strcpy(msg_elements[1], argv[2]);
-
-    } else { // [Invalid arguments] : Should not happen
+        req.op_code = 7;
+        strcpy(req.u_client_pipe_path.client_pipe_path, client_pipe_path);
+    } else {
+        printf("Invalid arguments\n");
         unlink(client_pipe_path);
         close(pipe_server);
-        return 1;
+        exit(EXIT_FAILURE);
     }
 
-    // Constructs the message that is going to be sent to the server
-    char *message = construct_message(msg_elements);
-    if (message == NULL)
-        return 1;
-
     // Sends the request to the server
-    send_msg(pipe_server, message);
+    if (write(pipe_server, &req, sizeof(request)) != sizeof(request)) {
+        fprintf(stderr, "[ERR]: manager write failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
     // Opens the session pipe for reading
     // This waits for the server to open it for writing
     if ((pipe_client = open(client_pipe_path, O_RDONLY)) == -1) {
-        fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+        fprintf(stderr, "[ERR]: manager open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    // The server will read and deconstruct the message, then answer the
-    // request through the client_pipe. TODO: read from client_pipe and
-    // interpret the answer (creating, removing, or listing boxes in the process)
+    // Reads the response from the server
+    if (read(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
+        fprintf(stderr, "[ERR]: manager read failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-    // Pensar em método de listar as caixas (elas são files no TFS)
+    switch (resp.op_code) {
+        case OP_CODE_CREAT_MAILBOX_ANS:
+            if (resp.u_return_code.return_code == 0)
+                fprintf(stdout, "OK\n");
+            else if (resp.u_return_code.return_code == -1)
+                fprintf(stdout, "ERROR %s\n",  resp.u_response_message.error_message);
 
-    /*while (true) {
-        char buffer[MAX_ANSWER_SIZE];
-        ssize_t ret = read(pipe_client, buffer, MAX_ANSWER_SIZE - 1);
-        if (ret == 0) {
-            // ret == 0 signals EOF
             break;
-        } else if (ret == -1) {
-            // ret == -1 signals error
-            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
+        case OP_CODE_RM_MAILBOX_ANS:
+            if (resp.u_return_code.return_code == 0)
+                fprintf(stdout, "OK\n");
+            else if (resp.u_return_code.return_code == -1)
+                fprintf(stdout, "ERROR %s\n",  resp.u_response_message.error_message);
 
-        buffer[ret] = 0;
+            break;
+        case OP_CODE_LIST_MAILBOX_ANS:
+            while (true) {
+                box_listing listing = resp.u_box_listing.box_listing;
+
+                if (listing.last == 1  && strcmp(listing.box_name, "") == 0) {
+                    fprintf(stdout, "NO BOXES FOUND\n");
+                    break;
+                }
+
+                fprintf(stdout, "%s %zu %zu %zu\n", listing.box_name, 
+                                listing.box_size, listing.n_publishers,
+                                listing.n_subscribers);
+
+                if (listing.last == 1)
+                    break;
+
+                else {  // Reads the next box's information
+                    if (read(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
+                        fprintf(stderr, "[ERR]: manager read failed: %s\n", strerror(errno));
+                        exit(EXIT_FAILURE);
+                    }
+                }
+            }
+            
+            break;
+        default:
+
     }
-    // Deconstructs the answer sent by the server
-    char **msg_elements = deconstruct_message(buffer);
-
-    if (strcmp(msg_elements[0]), "4") {
-
-    } else if (strcmp(msg_elements[0]), "6") {
-
-    } else if (strcmp(msg_elements[0]), "8") {
-
-    } else {
-        close(pipe_client);
-        close(pipe_server);
-        unlink(client_pipe_path);
-        exit(EXIT_FAILURE);
-    }
-    */
 
     close(pipe_client);
     close(pipe_server);
     unlink(client_pipe_path);
 
-    print_usage();
-    WARN("unimplemented"); // TODO: implement
-    return -1;
+    return 0;
 }
