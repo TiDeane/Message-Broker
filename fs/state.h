@@ -20,11 +20,10 @@ typedef struct {
 typedef enum { T_FILE, T_DIRECTORY } inode_type;
 
 typedef struct {
-    int n_subscribers;
-    int n_publisher;
+    uint64_t n_subscribers;
+    uint64_t n_publishers;
     int n_messages;
-    int message_index;
-} Mailbox;
+} mailbox;
 
 /**
  * Inode
@@ -34,7 +33,7 @@ typedef struct {
 
     size_t i_size;
     int i_data_block;
-    Mailbox *mailbox;
+    mailbox *mailbox;
     // if "mailbox" is not a NULL pointer, then this file is a mailbox, and the
     // inode's data block will store the mailbox's messages
 
