@@ -124,5 +124,5 @@ int main(int argc, char **argv) {
     close(pipe_server);
     unlink(client_pipe_path);
 
-    return -1;
+    return 0;
 }

@@ -1,10 +1,5 @@
 #include "logging.h"
 #include "common.h"
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
 
 #define PIPE_STRING_LENGTH (256)
 
@@ -13,22 +8,6 @@ static int pipe_server;
 
 static char publisher_pipe_path[PIPE_STRING_LENGTH] = {0};
 static char server_pipe_path[PIPE_STRING_LENGTH] = {0};
-
-
-void send_msg(int pipe, char const *msg) {
-    size_t len = strlen(msg);
-    size_t written = 0;
-
-    while (written < len) {
-        ssize_t ret = write(pipe, msg + written, len - written);
-        if (ret < 0) {
-            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        written += (size_t) ret;
-    }
-}
 
 int main(int argc, char **argv) {
 
