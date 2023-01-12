@@ -24,6 +24,7 @@ typedef struct {
     int n_publisher;
     int n_messages;
     int message_index;
+    bool new_message;
 } Mailbox;
 
 /**
