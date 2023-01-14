@@ -100,6 +100,29 @@ void register_publisher(request req) {
     int fhandle = 0;
     int pipe_publisher;
     ssize_t ret;
+    ssize_t bytes_written;
+    unsigned int box_index = mailbox_alloc; // impossible value
+
+    for (unsigned long i = 0; i < mailbox_alloc; i++) {
+        if (free_mailboxes[i] == true)
+            continue;
+        else {
+            if (strcmp(req.u_box_name.box_name, mailboxes[i].box_name) == 0) {
+                box_index = i;
+                break;
+            }
+        }
+    }
+
+    if (box_index == mailbox_alloc ) {
+        printf("[ERR]: publisher's mailbox does not exist\n");
+        return;
+    } else if (mailboxes[box_index].n_publishers == 1) {
+        printf("[ERR]: mailbox already has a publisher\n");
+        return;
+    }
+    
+    mailboxes[box_index].n_publishers = 1;
 
     char box_name_path[33] = "/";
     strcat(box_name_path, req.u_box_name.box_name);
@@ -131,7 +154,9 @@ void register_publisher(request req) {
             break;
         }
 
-        tfs_write(fhandle, req.u_publisher_message.message, sizeof(req.u_publisher_message.message));
+        bytes_written = tfs_write(fhandle, req.u_publisher_message.message, sizeof(req.u_publisher_message.message));
+        mailboxes[box_index].box_size += bytes_written;
+        mailboxes[box_index].n_messages += 1;
     }
     tfs_close(fhandle);
     close(pipe_publisher);
@@ -140,9 +165,27 @@ void register_publisher(request req) {
 void register_subscriber(request req) {
     int fhandle;
     int pipe_subscriber;
+    int box_index = mailbox_alloc; // impossible value
     ssize_t ret;
     char message_buffer[MESSAGE_SIZE];
     response resp;
+
+    for (unsigned long i = 0; i < mailbox_alloc; i++) {
+        if (free_mailboxes[i] == true)
+            continue;
+        else {
+            if (strcmp(req.u_box_name.box_name, mailboxes[i].box_name) == 0) {
+                box_index = i;
+                break;
+            }
+        }
+    }
+
+    if (box_index == mailbox_alloc ) {
+        printf("[ERR]: subscriber's mailbox does not exist\n");
+        return;
+    }
+    mailboxes[box_index].n_subscribers += 1;
 
     char box_name_path[33] = "/";
     strcat(box_name_path, req.u_box_name.box_name);
@@ -383,8 +426,4 @@ void op_list_mailbox(request req) {
     }
 
     close(pipe_client);
-}
-
-void publish_message(request req) {
-    (void)req;
 }
