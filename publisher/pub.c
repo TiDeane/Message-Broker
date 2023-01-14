@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 
     // Request Registry 
     {
-        req.op_code = 1;
+        req.op_code = OP_CODE_REG_PUBLISHER;
         strcpy(req.u_client_pipe_path.client_pipe_path,publisher_pipe_path);
         strcpy(req.u_box_name.box_name,box_name);
 
@@ -62,40 +62,34 @@ int main(int argc, char **argv) {
 
     // Request to Write Messages
     { 
-        req.op_code = 9;
+        req.op_code = OP_CODE_PUBLISHER_SERVER_MESSAGE;
         memset(req.u_box_name.box_name,'\0',BOX_NAME_SIZE);
-        char *message = malloc(1024);
+        char *message = malloc(MESSAGE_SIZE);;
 
         for(;;) {
-            fprintf(stdout,"Enter message: ");
-            ssize_t ret = fscanf(stdin,"%1023[^\n]", message);
-            fprintf(stderr, "[INFO]: received %zd B\n", ret);
-            strcpy(req.u_publisher_message.message,message);
-            if (ret == 0) {
-                // ret == 0 indicates EOF
-                unlink(publisher_pipe_path);
-                fprintf(stderr, "[INFO]: pipe closed\n");
-                return 0;
-            } else if (ret == -1) {
-                // ret == -1 indicates error
-                unlink(publisher_pipe_path);
-                fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-                exit(EXIT_FAILURE);
-            }
-
             // Opens publisher pipe to write messages
             // This waits for the server to open it for reading
             if ((pipe_publisher = open(server_pipe_path, O_WRONLY)) == -1) {
+                unlink(named_client_pipe);
                 fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
-            if (write(pipe_server, &req, sizeof(request)) != sizeof(request)) {
+            fprintf(stdout,"Enter message: ");
+            ssize_t ret = fscanf(stdin,"%1023s[^\n]", message);
+
+            strcpy(req.u_publisher_message.message,message);
+            if (ret == -1) {
+                // ret == -1 indicates EOF
+                unlink(named_client_pipe);
+                fprintf(stderr, "[INFO]: closing pipe\n");
+                break;
+            }
+
+            if (write(pipe_publisher, &req, sizeof(request)) != sizeof(request)) {
                 fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
                 exit(EXIT_FAILURE);
             }
-            close(pipe_publisher);
         }
+        close(pipe_publisher);
     }
-
-    return 0;
 }
