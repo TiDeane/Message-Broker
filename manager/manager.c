@@ -94,25 +94,27 @@ int main(int argc, char **argv) {
 
             break;
         case OP_CODE_LIST_MAILBOX_ANS:
-            while (true) {
-                box_listing listing = resp.u_box_listing.box_listing;
+            box_listing listing = resp.u_box_listing.box_listing;
 
-                if (listing.last == 1  && strcmp(listing.box_name, "") == 0) {
-                    fprintf(stdout, "NO BOXES FOUND\n");
-                    break;
-                }
+            if (listing.last == 1  && strcmp(listing.box_name, "") == 0) {
+                fprintf(stdout, "NO BOXES FOUND\n");
+                break;
+            }
+            else {
+                while (true) {
+                    listing = resp.u_box_listing.box_listing;
 
-                fprintf(stdout, "%s %zu %zu %zu\n", listing.box_name, 
-                                listing.box_size, listing.n_publishers,
-                                listing.n_subscribers);
+                    fprintf(stdout, "%s %zu %zu %zu\n", listing.box_name, 
+                                    listing.box_size, listing.n_publishers,
+                                    listing.n_subscribers);
 
-                if (listing.last == 1)
-                    break;
-
-                else {  // Reads the next box's information
-                    if (read(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
-                        fprintf(stderr, "[ERR]: manager read failed: %s\n", strerror(errno));
-                        exit(EXIT_FAILURE);
+                    if (listing.last == 1)
+                        break;
+                    else {  // Reads the next box's information
+                        if (read(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
+                            fprintf(stderr, "[ERR]: manager read failed: %s\n", strerror(errno));
+                            exit(EXIT_FAILURE);
+                        }
                     }
                 }
             }

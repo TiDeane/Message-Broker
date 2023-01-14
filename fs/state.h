@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <stdint.h>
 
 /**
  * Directory entry
@@ -20,6 +21,8 @@ typedef struct {
 typedef enum { T_FILE, T_DIRECTORY } inode_type;
 
 typedef struct {
+    char box_name[32];       /* "/box_name" is the path to the mailbox's file */
+    uint64_t box_size;
     uint64_t n_subscribers;
     uint64_t n_publishers;
     int n_messages;
@@ -33,9 +36,6 @@ typedef struct {
 
     size_t i_size;
     int i_data_block;
-    mailbox *mailbox;
-    // if "mailbox" is not a NULL pointer, then this file is a mailbox, and the
-    // inode's data block will store the mailbox's messages
 
 } inode_t;
 

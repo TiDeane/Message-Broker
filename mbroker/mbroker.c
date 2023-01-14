@@ -8,12 +8,13 @@ static int pipe_server;
 
 static char *server_pipe_path;
 
-// Array of strings that keeps all mailbox paths
-static char **mailbox_paths;
+// Array that stores all mailboxes
+static mailbox *mailboxes;
 
-// When mailbox_number reaches mailbox_alloc, mailbox_alloc is increased by 10
-// and memory is allocated for 10 more
-static int mailbox_number = 0;
+// free_mailboxes[i] is true if mailboxes[i] is currently free/empty
+static bool *free_mailboxes;
+
+// Current maximum length of the array
 static long unsigned mailbox_alloc = 10;
 
 int main(int argc, char **argv) {
@@ -23,10 +24,12 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    mailbox_paths = malloc(mailbox_alloc * sizeof(char*));
+    mailboxes = malloc(mailbox_alloc * sizeof(mailbox));
+    free_mailboxes = malloc(mailbox_alloc * sizeof(bool));
+    for (unsigned long i = 0; i < mailbox_alloc; i++)
+        free_mailboxes[i] = true;
 
     request req;
-    response resp;
 
     server_pipe_path = argv[1];
 
@@ -96,31 +99,44 @@ int main(int argc, char **argv) {
 }
 
 void register_publisher(request req) {
-
+    (void)req;
 }
 
 void register_subscriber(request req) {
-
+    (void)req;
 }
 
 void op_create_mailbox(request req) {
-    response resp;
     int pipe_client;
+    int fhandle;
+
+    response resp;
+    resp.op_code = OP_CODE_RM_MAILBOX_ANS;
+
+    bool box_already_exists = false;
+    long free_mailbox_index = -1;
 
     if ((pipe_client = open(req.u_client_pipe_path.client_pipe_path, O_WRONLY)) == -1) {
         fprintf(stderr, "[ERR]: client open failed: %s\n", strerror(errno));
         return;
     }
 
+    for (unsigned long i = 0; i < mailbox_alloc; i++)
+        if (free_mailboxes[i] == true) {
+            if (free_mailbox_index == -1)
+                // free_mailbox_index will be the first free spot
+                free_mailbox_index = (long) i;
+            continue;
+        }
+        else if (strcmp(mailboxes[i].box_name, req.u_box_name.box_name) == 0) {
+            box_already_exists = true;
+            break;
+        }
+    
     char box_name_path[33] = "/";
     strcat(box_name_path, req.u_box_name.box_name);
 
-    inode_t *root = inode_get(ROOT_DIR_INUM);
-    int check_box_exists = tfs_lookup(box_name_path, root);
-
-    int fhandle;
-
-    if (check_box_exists != -1) {
+    if (box_already_exists) {
         resp.u_return_code.return_code = -1;
         strcpy(resp.u_response_message.error_message, "[ERR]: box already exists\n");
     }
@@ -128,45 +144,171 @@ void op_create_mailbox(request req) {
         resp.u_return_code.return_code = -1;
         strcpy(resp.u_response_message.error_message, "[ERR]: could not create box\n");
     } else {
-        // Now the box has been created, so we have to run tfs_lookup again
-        int mailbox_inumber = tfs_lookup(box_name_path, root);
-        inode_t* mailbox_inode = inode_get(mailbox_inumber);
-
+        /* The mailbox's file was successfully created */
         mailbox new_mailbox;
+        strcpy(new_mailbox.box_name, req.u_box_name.box_name);
+        new_mailbox.box_size = 0;
         new_mailbox.n_subscribers = 0;
         new_mailbox.n_publishers = 0;
         new_mailbox.n_messages = 0;
-        mailbox_inode->mailbox = &new_mailbox;
 
-        // If mailbox_alloc has been reached by mailbox_number, allocates memory
-        // for 10 more
-        if (mailbox_number == mailbox_alloc) {
+        // If there are no free spaces (the array "mailboxes" is full)
+        if (free_mailbox_index == -1) {
+            // After allocating more, the current value of mailbox_alloc will be
+            // the next free spot
+            free_mailbox_index = (long) mailbox_alloc;
+
+            // Allocates memory for 10 more
             mailbox_alloc += 10;
-            char **temp = realloc(mailbox_paths, mailbox_alloc * sizeof(char*));
+
+            mailbox *temp = realloc(mailboxes, mailbox_alloc * sizeof(mailbox));
             if (temp == NULL) {
                 printf("No memory\n");
                 return;
             }
-            mailbox_paths = temp;
+            mailboxes = temp;
+
+            bool *temp2 = realloc(free_mailboxes, mailbox_alloc * sizeof(bool));
+            if (temp2 == NULL) {
+                printf("No memory\n");
+                return;
+            }
+            free_mailboxes = temp2;
+
+            // All new spots are free
+            for (unsigned long i = mailbox_alloc - 10; i < mailbox_alloc; i++)
+                free_mailboxes[i] = true;
         }
 
-        // Adds the new mailbox's path to the array
-        mailbox_paths[mailbox_number] = malloc(BOX_NAME_SIZE + 1);
-        strcpy(mailbox_paths[mailbox_number], box_name_path);
-        mailbox_number++;
+        // Adds the new mailbox to the array
+        mailboxes[free_mailbox_index] = new_mailbox;
+        free_mailboxes[free_mailbox_index] = false;
+
+        resp.u_return_code.return_code = 0;
+        memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
 
         tfs_close(fhandle);
     }
+
+    if (write(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
+        fprintf(stderr, "[ERR]: mbroker write failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    close(pipe_client);
 }
 
 void op_remove_mailbox(request req) {
+    int pipe_client;
 
+    long box_index = -1; // arbitrary value
+    bool box_exists = false;
+
+    response resp;
+    resp.op_code = OP_CODE_RM_MAILBOX_ANS;
+
+    if ((pipe_client = open(req.u_client_pipe_path.client_pipe_path, O_WRONLY)) == -1) {
+        fprintf(stderr, "[ERR]: client open failed: %s\n", strerror(errno));
+        return;
+    }
+
+    for (unsigned long i = 0; i < mailbox_alloc; i++)
+        if (free_mailboxes[i] == true) {
+            continue;
+        }
+        else if (strcmp(mailboxes[i].box_name, req.u_box_name.box_name) == 0) {
+            box_index = (long) i;
+            box_exists = true;
+            break;
+        }
+    
+    char box_name_path[33] = "/";
+    strcat(box_name_path, req.u_box_name.box_name);
+
+    if (box_exists == false) {
+        resp.u_return_code.return_code = -1;
+        strcpy(resp.u_response_message.error_message, "[ERR]: box doesn't exists\n");
+    }
+    else if (tfs_unlink(box_name_path) == -1) {
+        resp.u_return_code.return_code = -1;
+        strcpy(resp.u_response_message.error_message, "[ERR]: could remove box\n");
+    } else {
+        /* The mailbox's file was succesfully removed */
+
+        memset(mailboxes[box_index].box_name, '\0', BOX_NAME_SIZE);   
+        free_mailboxes[box_index] = true; // index can be used for a new box
+
+        resp.u_return_code.return_code = 0;
+        memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
+    }
+
+    if (write(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
+        fprintf(stderr, "[ERR]: mbroker write failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    close(pipe_client);
 }
 
 void op_list_mailbox(request req) {
+    int pipe_client;
 
+    unsigned long box_amount = 0;
+    unsigned long boxes_printed = 0;
+
+    response resp;
+    resp.op_code = OP_CODE_LIST_MAILBOX_ANS;
+
+    if ((pipe_client = open(req.u_client_pipe_path.client_pipe_path, O_WRONLY)) == -1) {
+        fprintf(stderr, "[ERR]: client open failed: %s\n", strerror(errno));
+        return;
+    }
+
+    for (unsigned long i = 0; i < mailbox_alloc; i++)
+        if (free_mailboxes[i] == false)
+            box_amount += 1;
+
+    box_listing listing;
+    if (box_amount == 0) { // if there are no boxes
+        strcpy(listing.box_name, "");
+        listing.last = 1;
+
+        resp.u_box_listing.box_listing = listing;
+
+        if (write(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
+            fprintf(stderr, "[ERR]: mbroker write failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+    }
+    else {
+        for (unsigned long i = 0; i < mailbox_alloc; i++) {
+            if (boxes_printed == box_amount)
+                break;
+            if (free_mailboxes[i] == false) { // if there is a box in this index
+                if (boxes_printed == box_amount - 1) // checks if this is the last box
+                    listing.last = 1;
+                else
+                    listing.last = 0;
+                strcpy(listing.box_name, mailboxes[i].box_name);
+                listing.box_size = mailboxes[i].box_size;
+                listing.n_publishers = mailboxes[i].n_publishers;
+                listing.n_subscribers = mailboxes[i].n_subscribers;
+                
+                resp.u_box_listing.box_listing = listing;
+
+                if (write(pipe_client, &resp, sizeof(response)) != sizeof(response)) {
+                    fprintf(stderr, "[ERR]: mbroker write failed: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+
+                boxes_printed += 1;
+            }
+        }
+    }
+
+    close(pipe_client);
 }
 
 void publish_message(request req) {
-
+    (void)req;
 }

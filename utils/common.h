@@ -39,8 +39,8 @@ typedef struct {
     uint64_t n_subscribers;
 } box_listing;
 
-typedef struct {                    /* Request (client --> server) */
-    uint8_t op_code;                /* Operation code */
+typedef struct {                                /* Request (client --> server) */
+    uint8_t op_code;                            /* Operation code */
 
     union {
         char client_pipe_path[CLIENT_PIPE_PATH_SIZE]; /* op_code 1, 2, 3, 5 or 7 */
