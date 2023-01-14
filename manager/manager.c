@@ -41,15 +41,15 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    if (strcmp(argv[3], "create") && argc == 5) {
+    if (strcmp(argv[3], "create") == 0 && argc == 5) {
         req.op_code = 3;
         strcpy(req.u_client_pipe_path.client_pipe_path, client_pipe_path);
         strcpy(req.u_box_name.box_name, argv[4]);
-    } else if (strcmp(argv[3], "remove") && argc == 5) {
+    } else if (strcmp(argv[3], "remove") == 0 && argc == 5) {
         req.op_code = 5;
         strcpy(req.u_client_pipe_path.client_pipe_path, client_pipe_path);
         strcpy(req.u_box_name.box_name, argv[4]);
-    } else if (strcmp(argv[3], "list") && argc == 4) {
+    } else if (strcmp(argv[3], "list") == 0 && argc == 4) {
         req.op_code = 7;
         strcpy(req.u_client_pipe_path.client_pipe_path, client_pipe_path);
     } else {

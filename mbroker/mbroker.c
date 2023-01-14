@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     }
 
     // Opens server pipe for reading
-    if ((pipe_server = open(server_pipe_path, O_WRONLY)) == -1) {
+    if ((pipe_server = open(server_pipe_path, O_RDONLY)) == -1) {
         fprintf(stderr, "[ERR]: manager open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
