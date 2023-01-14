@@ -112,6 +112,10 @@ void register_publisher(request req) {
         exit(EXIT_FAILURE);
     }
 
+    if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
+        printf("[ERR]: publisher could not find the mailbox's file\n");
+        return;
+    }
     while (true) {
         
         if ((ret = read(pipe_publisher, &req, sizeof(request))) != sizeof(request)) {
@@ -126,10 +130,8 @@ void register_publisher(request req) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
             break;
         }
-        // verify
-        fhandle = tfs_open(box_name_path, 0);
+
         tfs_write(fhandle, req.u_publisher_message.message, sizeof(req.u_publisher_message.message));
-        tfs_close(fhandle);
     }
     tfs_close(fhandle);
     close(pipe_publisher);
@@ -150,11 +152,14 @@ void register_subscriber(request req) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
+        printf("[ERR]: subscriber could not find the mailbox's file\n");
+        return;
+    }
     while (true) {
         // verify box name
-        fhandle = tfs_open(box_name_path, 0);
         tfs_read(fhandle, message_buffer, sizeof(message_buffer));
-        tfs_close(fhandle);
         
         strcpy(resp.u_response_message.message,message_buffer);
         
