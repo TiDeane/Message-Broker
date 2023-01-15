@@ -5,16 +5,14 @@
 static int pipe_client;
 static int pipe_server;
 
-static char named_client_pipe[CLIENT_PIPE_PATH_SIZE] = {0};
-static char client_pipe_path[CLIENT_PIPE_PATH_SIZE] = {"../manager/"};
-static char server_pipe_path[CLIENT_PIPE_PATH_SIZE] = {"../mbroker/"};
+static char *client_pipe_path;
+static char *server_pipe_path;
 
 request req;
 response resp;
 box_listing listing;
 
 static void sig_handler(int sig) {
-  static int count = 0;
 
   // UNSAFE: This handler uses non-async-signal-safe functions (printf(),
   // exit();)
@@ -25,15 +23,12 @@ static void sig_handler(int sig) {
     //
     unlink(client_pipe_path);
     if (signal(SIGINT, sig_handler) == SIG_ERR) {
-      exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
     }
-    count++;
-    fprintf(stderr, "\nCaught SIGINT (%d)\n", count);
     return; // Resume execution at point of interruption
   }
 
   // Must be SIGQUIT - print a message and terminate the process
-  fprintf(stderr, "\nCaught SIGQUIT - that's all folks!\n");
   exit(EXIT_SUCCESS);
 }
 
@@ -51,20 +46,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    strcat(server_pipe_path, argv[1]);
-
-    strcpy(named_client_pipe, argv[2]);
-    strcat(client_pipe_path, named_client_pipe);
+    server_pipe_path = argv[1];
+    client_pipe_path = argv[2];
 
     // Remove session pipe if it exists
-    if (unlink(named_client_pipe) != 0 && errno != ENOENT) {
+    if (unlink(client_pipe_path) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: manager unlink(%s) failed: %s\n", argv[2],
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Creates the new session's named pipe
-    if (mkfifo(named_client_pipe, 0640) != 0) {
+    if (mkfifo(client_pipe_path, 0640) != 0) {
         fprintf(stderr, "[ERR]: manager mkfifo failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -83,11 +76,10 @@ int main(int argc, char **argv) {
         strcpy(req.u_client_pipe_path.client_pipe_path, client_pipe_path);
     } else {
         printf("Invalid arguments\n");
-        unlink(named_client_pipe);
+        unlink(client_pipe_path);
         close(pipe_server);
         exit(EXIT_FAILURE);
     }
-    fprintf(stdout,"[ code = %d ] | [ %s ] | [ %s ]\n", req.op_code, req.u_client_pipe_path.client_pipe_path, req.u_box_name.box_name);
     
     // Opens the server pipe for writing to request permission for a new session
     // This waits for the server to open it for reading 
@@ -101,10 +93,10 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     close(pipe_server);
-    fprintf(stdout,"request sent successfully\n");
+
     // Opens the session pipe for reading
     // This waits for the server to open it for writing
-    if ((pipe_client = open(named_client_pipe, O_RDONLY)) == -1) {
+    if ((pipe_client = open(client_pipe_path, O_RDONLY)) == -1) {
         fprintf(stderr, "[ERR]: manager open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -118,14 +110,14 @@ int main(int argc, char **argv) {
     switch (resp.op_code) {
         case OP_CODE_CREAT_MAILBOX_ANS:
             if (resp.u_return_code.return_code == 0)
-                fprintf(stdout, "OK_created\n");
+                fprintf(stdout, "OK\n");
             else if (resp.u_return_code.return_code == -1)
                 fprintf(stdout, "ERROR %s\n",  resp.u_response_message.error_message);
 
             break;
         case OP_CODE_RM_MAILBOX_ANS:
             if (resp.u_return_code.return_code == 0)
-                fprintf(stdout, "OK_removed\n");
+                fprintf(stdout, "OK\n");
             else if (resp.u_return_code.return_code == -1)
                 fprintf(stdout, "ERROR %s\n",  resp.u_response_message.error_message);
 
@@ -161,6 +153,5 @@ int main(int argc, char **argv) {
     }
 
     close(pipe_client);
-    unlink(named_client_pipe);
+    unlink(client_pipe_path);
 }
-

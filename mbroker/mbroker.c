@@ -6,7 +6,7 @@
 
 static int pipe_server;
 
-static char named_server_pipe[CLIENT_PIPE_PATH_SIZE] = {0};
+static char *named_server_pipe;
 static char *publisher_pipe_path;
 
 // Array that stores all mailboxes
@@ -19,28 +19,27 @@ static bool *free_mailboxes;
 static long unsigned mailbox_alloc = 10;
 
 static void sig_handler(int sig) {
-  static int count = 0;
 
-  // UNSAFE: This handler uses non-async-signal-safe functions (printf(),
-  // exit();)
-  if (sig == SIGINT) {
+    // UNSAFE: This handler uses non-async-signal-safe functions (printf(),
+    // exit();)
+    if (sig == SIGINT) {
     // In some systems, after the handler call the signal gets reverted
     // to SIG_DFL (the default action associated with the signal).
     // So we set the signal handler back to our function after each trap.
     //
-    tfs_destroy();
-    unlink(named_server_pipe);
-    if (signal(SIGINT, sig_handler) == SIG_ERR) {
-      exit(EXIT_FAILURE);
-    }
-    count++;
-    fprintf(stderr, "\nCaught SIGINT (%d)\n", count);
-    return; // Resume execution at point of interruption
-  }
+        tfs_destroy();
+        unlink(named_server_pipe);
 
-  // Must be SIGQUIT - print a message and terminate the process
-  fprintf(stderr, "\nCaught SIGQUIT - that's all folks!\n");
-  exit(EXIT_SUCCESS);
+        if (signal(SIGINT, sig_handler) == SIG_ERR) {
+            exit(EXIT_FAILURE);
+        }
+        return; // Resume execution at point of interruption
+    }
+
+    // Must be SIGQUIT - print a message and terminate the process
+    tfs_destroy();
+    
+    exit(EXIT_SUCCESS);
 }
 
 
@@ -64,7 +63,7 @@ int main(int argc, char **argv) {
 
     request req;
 
-    strcpy(named_server_pipe, argv[1]);
+    named_server_pipe = argv[1];
 
     // Remove server pipe if it exists
     if (unlink(named_server_pipe) != 0 && errno != ENOENT) {
@@ -139,17 +138,17 @@ void register_publisher(request req) {
 
     if (box_index == mailbox_alloc ) {
         resp.u_return_code.return_code = -1;
-        strcpy(resp.u_response_message.error_message, "[ERR]: publisher's mailbox does not exist\n");
+        strcpy(resp.u_response_message.error_message, "publisher's mailbox does not exist");
     } else if (mailboxes[box_index].n_publishers == 1) {
         resp.u_return_code.return_code = -1;
-        strcpy(resp.u_response_message.error_message, "[ERR]: mailbox already has a publisher\n");
+        strcpy(resp.u_response_message.error_message, "mailbox already has a publisher");
     } else {
         char box_name_path[33] = "/";
         strcat(box_name_path, req.u_box_name.box_name);
 
         if ((fhandle = tfs_open(box_name_path, TFS_O_APPEND)) == -1) {
             resp.u_return_code.return_code = -1;
-            strcpy(resp.u_response_message.error_message, "[ERR]: publisher could not find the mailbox's file\n");
+            strcpy(resp.u_response_message.error_message, "publisher could not find the mailbox's file");
         } else {
             resp.u_return_code.return_code = 0;
             memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
@@ -187,14 +186,16 @@ void register_publisher(request req) {
                 fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
             }
             // ret == 0 indicates EOF
-            fprintf(stderr, "[INFO]: publisher closed\n");
             break;
         } 
         strcat(req.u_publisher_message.message,"\n");
         bytes_written = tfs_write(fhandle, req.u_publisher_message.message, strlen(req.u_publisher_message.message));
         mailboxes[box_index].box_size += (uint64_t) bytes_written;
         mailboxes[box_index].n_messages += 1;
-        fprintf(stdout,"exit: %s", req.u_publisher_message.message);
+
+        // Notifies with condition variable that a new message was written
+        mailboxes[box_index].new_message = 1;
+        mailboxes[box_index].new_message = 0;
     }
     mailboxes[box_index].n_publishers = 0;
     tfs_close(fhandle);
@@ -223,14 +224,14 @@ void register_subscriber(request req) {
 
     if (box_index == mailbox_alloc) {
         resp.u_return_code.return_code = -1;
-        strcpy(resp.u_response_message.error_message, "[ERR]: subscriber's mailbox does not exist\n");
+        strcpy(resp.u_response_message.error_message, "subscriber's mailbox does not exist");
     } else {
         char box_name_path[33] = "/";
         strcat(box_name_path, req.u_box_name.box_name);
 
         if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
             resp.u_return_code.return_code = -1;
-            strcpy(resp.u_response_message.error_message, "[ERR]: subscriber could not find the mailbox's file\n");
+            strcpy(resp.u_response_message.error_message, "subscriber could not find the mailbox's file");
         } else {
             resp.u_return_code.return_code = 0;
             memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
@@ -262,10 +263,13 @@ void register_subscriber(request req) {
         ret = tfs_read(fhandle, message_buffer, sizeof(message_buffer)-1);
         if (ret == 0 || ret == -1) {
             // ret == -1 indicates EOF
-            fprintf(stderr, "[INFO]: end of file\n");
             break;
         }
+        
+        // Removing this next line makes the program get stuck and exit mbroker
+        // and we have no idea why...
         fprintf(stdout,"%s", message_buffer);
+
         strcpy(resp.u_response_message.message,message_buffer);
         
         if ((ret = write(pipe_subscriber, &resp, sizeof(response))) != sizeof(response)) {
@@ -274,7 +278,6 @@ void register_subscriber(request req) {
         }
         if (ret == 0) {
             // ret == 0 indicates EOF
-            fprintf(stderr, "[INFO]: subscriber closed\n");
             break;
         } else if (ret == -1) {
             // ret == -1 indicates error
@@ -319,11 +322,11 @@ void op_create_mailbox(request req) {
 
     if (box_already_exists) {
         resp.u_return_code.return_code = -1;
-        strcpy(resp.u_response_message.error_message, "[ERR]: box already exists\n");
+        strcpy(resp.u_response_message.error_message, "box already exists");
     }
     else if ((fhandle = tfs_open(box_name_path, TFS_O_CREAT)) == -1) {
         resp.u_return_code.return_code = -1;
-        strcpy(resp.u_response_message.error_message, "[ERR]: could not create box\n");
+        strcpy(resp.u_response_message.error_message, "could not create box");
     } else {
         /* The mailbox's file was successfully created */
         mailbox new_mailbox;
@@ -332,6 +335,7 @@ void op_create_mailbox(request req) {
         new_mailbox.n_subscribers = 0;
         new_mailbox.n_publishers = 0;
         new_mailbox.n_messages = 0;
+        new_mailbox.new_message = 0;
 
         // If there are no free spaces (the array "mailboxes" is full)
         if (free_mailbox_index == -1) {
@@ -377,7 +381,6 @@ void op_create_mailbox(request req) {
     }
 
     close(pipe_client);
-    fprintf(stderr, "[INFO]: manager create closed\n");
 }
 
 void op_remove_mailbox(request req) {
@@ -409,11 +412,11 @@ void op_remove_mailbox(request req) {
 
     if (box_exists == false) {
         resp.u_return_code.return_code = -1;
-        strcpy(resp.u_response_message.error_message, "[ERR]: box doesn't exists\n");
+        strcpy(resp.u_response_message.error_message, "box doesn't exist");
     }
     else if (tfs_unlink(box_name_path) == -1) {
         resp.u_return_code.return_code = -1;
-        strcpy(resp.u_response_message.error_message, "[ERR]: could remove box\n");
+        strcpy(resp.u_response_message.error_message, "could remove box");
     } else {
         /* The mailbox's file was succesfully removed */
 

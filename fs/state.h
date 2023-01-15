@@ -26,6 +26,10 @@ typedef struct {
     uint64_t n_subscribers;
     uint64_t n_publishers;
     int n_messages;
+
+    int new_message;                        // Unused
+    pthread_mutex_t mailbox_condvar_lock;   // Unused
+    pthread_cond_t mailbox_condvar;         // Unused
 } mailbox;
 
 /**

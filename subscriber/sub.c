@@ -9,14 +9,13 @@ static int pipe_server;
 
 static int messages_received = 0;
 
-static char named_subscriber_pipe[CLIENT_PIPE_PATH_SIZE] = {0};
-static char subscriber_pipe_path[CLIENT_PIPE_PATH_SIZE] = {"../subscriber/"};
-static char server_pipe_path[CLIENT_PIPE_PATH_SIZE] = {"../mbroker/"};
+static char *subscriber_pipe_path;
+static char *server_pipe_path;
 
 static char *box_name;
 
-request reqRegistry;
-response respMessage;
+request req;
+response resp;
 
 static void sig_handler(int sig) {
   // UNSAFE: This handler uses non-async-signal-safe functions (printf(),
@@ -29,7 +28,7 @@ static void sig_handler(int sig) {
         // Caught SIGINT
         fprintf(stdout, "%d\n", messages_received);
         close(pipe_subscriber);
-        unlink(named_subscriber_pipe);
+        unlink(subscriber_pipe_path);
 
         exit(EXIT_SUCCESS);
     }
@@ -47,29 +46,28 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    strcat(server_pipe_path, argv[1]);
-    strcpy(named_subscriber_pipe,argv[2]);
-    strcat(subscriber_pipe_path,named_subscriber_pipe);
+    server_pipe_path = argv[1];
+    subscriber_pipe_path = argv[2];
     box_name = argv[3];
 
     // Remove session pipe if it exists
-    if (unlink(named_subscriber_pipe) != 0 && errno != ENOENT) {
+    if (unlink(subscriber_pipe_path) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[2],
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Creates the new session's named pipe
-    if (mkfifo(named_subscriber_pipe, 0640) != 0) {
+    if (mkfifo(subscriber_pipe_path, 0640) != 0) {
         fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Request Registry
     {
-        reqRegistry.op_code = OP_CODE_REG_SUBSCRIBER;
-        strcpy(reqRegistry.u_client_pipe_path.client_pipe_path, subscriber_pipe_path);
-        strcpy(reqRegistry.u_box_name.box_name, box_name);
+        req.op_code = OP_CODE_REG_SUBSCRIBER;
+        strcpy(req.u_client_pipe_path.client_pipe_path, subscriber_pipe_path);
+        strcpy(req.u_box_name.box_name, box_name);
 
         // Opens the server pipe for writing to request permission for a new session
         // This waits for the server to open it for reading 
@@ -77,7 +75,7 @@ int main(int argc, char **argv) {
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        if (write(pipe_server, &reqRegistry, sizeof(request)) != sizeof(request)) {
+        if (write(pipe_server, &req, sizeof(request)) != sizeof(request)) {
             fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
@@ -86,45 +84,52 @@ int main(int argc, char **argv) {
 
     // Opens subscriber pipe to read messages sent by the server
     // This waits for the server to open it for writing
-    if ((pipe_subscriber = open(named_subscriber_pipe, O_RDONLY)) == -1) {
+    if ((pipe_subscriber = open(subscriber_pipe_path, O_RDONLY)) == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    if (read(pipe_subscriber, &respMessage, sizeof(response)) != sizeof(response)) {
+    if (read(pipe_subscriber, &resp, sizeof(response)) != sizeof(response)) {
         fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    if (respMessage.u_return_code.return_code == -1) {
-        unlink(named_subscriber_pipe);
+    if (resp.u_return_code.return_code == -1) {
+        unlink(subscriber_pipe_path);
         // Request to create a new session was denied
+        fprintf(stdout, "ERROR %s\n",  resp.u_response_message.error_message);
         exit(EXIT_FAILURE);
     }
     close(pipe_subscriber);
 
     // Read Response Messages
     {   
-        respMessage.op_code = OP_CODE_SERVER_PUBLISHER_MESSAGE;
+        resp.op_code = OP_CODE_SERVER_PUBLISHER_MESSAGE;
         // Opens subscriber pipe to read messages sent by the server
         // This waits for the server to open it for writing
-        if ((pipe_subscriber = open(named_subscriber_pipe, O_RDONLY)) == -1) {
-            unlink(named_subscriber_pipe);
+        if ((pipe_subscriber = open(subscriber_pipe_path, O_RDONLY)) == -1) {
+            unlink(subscriber_pipe_path);
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
         
         while (true) {
             
-            ssize_t ret = read(pipe_subscriber, &respMessage, sizeof(response));
+            ssize_t ret = read(pipe_subscriber, &resp, sizeof(response));
             if (ret == 0 || ret == -1) {
                 // ret == 0 indicates EOF
-                fprintf(stderr, "[INFO]: end of file\n");
+                fprintf(stdout, "%d\n", messages_received);
                 break;
             }
             
-            fprintf(stdout, "%s", respMessage.u_response_message.message);
-            messages_received++;
+            // tfs_read will read the file's entire data_block, sending all messages
+            fprintf(stdout, "%s", resp.u_response_message.message);
+            
+            char *token = strtok(resp.u_response_message.message, "\n");
+            while (token != NULL) {
+                messages_received++;
+                token = strtok(NULL, "\n");
+            }
         }
         close(pipe_subscriber);
-        unlink(named_subscriber_pipe);
+        unlink(subscriber_pipe_path);
     }
 }

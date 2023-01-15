@@ -6,9 +6,8 @@
 static int pipe_publisher;
 static int pipe_server;
 
-static char named_publisher_pipe[CLIENT_PIPE_PATH_SIZE] = {0};
-static char publisher_pipe_path[CLIENT_PIPE_PATH_SIZE] = {"../publisher/"};
-static char server_pipe_path[CLIENT_PIPE_PATH_SIZE] = {"../mbroker/"};
+static char *publisher_pipe_path;
+static char *server_pipe_path;
 
 static char *box_name;
 
@@ -26,7 +25,7 @@ static void sig_handler(int sig) {
         // Caught SIGQUIT
         close(pipe_server);
         close(pipe_publisher);
-        unlink(named_publisher_pipe);
+        unlink(publisher_pipe_path);
 
         exit(EXIT_SUCCESS);
     }
@@ -43,20 +42,19 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    strcat(server_pipe_path,argv[1]);
-    strcpy(named_publisher_pipe,argv[2]);
-    strcat(publisher_pipe_path,named_publisher_pipe);
+    server_pipe_path = argv[1];
+    publisher_pipe_path = argv[2];
     box_name = argv[3];
 
     // Remove session pipe if it exists
-    if (unlink(named_publisher_pipe) != 0 && errno != ENOENT) {
+    if (unlink(publisher_pipe_path) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: unlink(%s) failed: %s\n", argv[2],
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Creates the new session's named pipe
-    if (mkfifo(named_publisher_pipe, 0640) != 0) {
+    if (mkfifo(publisher_pipe_path, 0640) != 0) {
         fprintf(stderr, "[ERR]: mkfifo failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -81,7 +79,7 @@ int main(int argc, char **argv) {
         
     }
 
-    if ((pipe_publisher = open(named_publisher_pipe, O_RDONLY)) == -1) {
+    if ((pipe_publisher = open(publisher_pipe_path, O_RDONLY)) == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -91,8 +89,9 @@ int main(int argc, char **argv) {
     }
 
     if (resp.u_return_code.return_code == -1) {
-        unlink(named_publisher_pipe);
+        unlink(publisher_pipe_path);
         // Request to create a new session was denied
+        fprintf(stdout, "ERROR %s\n",  resp.u_response_message.error_message);
         exit(EXIT_FAILURE);
     }
     close(pipe_publisher);
@@ -106,8 +105,8 @@ int main(int argc, char **argv) {
 
         // Opens publisher pipe to write messages
         // This waits for the server to open it for reading
-        if ((pipe_publisher = open(named_publisher_pipe, O_WRONLY)) == -1) {
-            unlink(named_publisher_pipe);
+        if ((pipe_publisher = open(publisher_pipe_path, O_WRONLY)) == -1) {
+            unlink(publisher_pipe_path);
             fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
@@ -120,7 +119,7 @@ int main(int argc, char **argv) {
             strcpy(req.u_publisher_message.message,message);
             if (ret == -1) {
                 // ret == -1 indicates EOF
-                fprintf(stderr, "[INFO]: closing pipe\n");
+                // [Closing pipe]
                 break;
             }
             if (write(pipe_publisher, &req, sizeof(request)) != sizeof(request)) {
@@ -129,6 +128,6 @@ int main(int argc, char **argv) {
             }
         }
         close(pipe_publisher);
-        unlink(named_publisher_pipe);
+        unlink(publisher_pipe_path);
     }
 }
