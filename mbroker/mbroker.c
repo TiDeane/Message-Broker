@@ -6,7 +6,8 @@
 
 static int pipe_server;
 
-static char *server_pipe_path;
+static char named_server_pipe[CLIENT_PIPE_PATH_SIZE] = {0};
+static char *publisher_pipe_path;
 
 // Array that stores all mailboxes
 static mailbox *mailboxes;
@@ -17,15 +18,45 @@ static bool *free_mailboxes;
 // Current maximum length of the array
 static long unsigned mailbox_alloc = 10;
 
+static void sig_handler(int sig) {
+  static int count = 0;
+
+  // UNSAFE: This handler uses non-async-signal-safe functions (printf(),
+  // exit();)
+  if (sig == SIGINT) {
+    // In some systems, after the handler call the signal gets reverted
+    // to SIG_DFL (the default action associated with the signal).
+    // So we set the signal handler back to our function after each trap.
+    //
+    tfs_destroy();
+    unlink(named_server_pipe);
+    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+      exit(EXIT_FAILURE);
+    }
+    count++;
+    fprintf(stderr, "\nCaught SIGINT (%d)\n", count);
+    return; // Resume execution at point of interruption
+  }
+
+  // Must be SIGQUIT - print a message and terminate the process
+  fprintf(stderr, "\nCaught SIGQUIT - that's all folks!\n");
+  exit(EXIT_SUCCESS);
+}
+
+
 int main(int argc, char **argv) {
 
+    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+        exit(EXIT_FAILURE);
+    }
+     
     if (argc < 2) {
         printf("Please specify the pathname of the server's pipe.\n");
         return 1;
     }
-    
+
     tfs_init(NULL);
-    
+
     mailboxes = malloc(mailbox_alloc * sizeof(mailbox));
     free_mailboxes = malloc(mailbox_alloc * sizeof(bool));
     for (unsigned long i = 0; i < mailbox_alloc; i++)
@@ -33,42 +64,31 @@ int main(int argc, char **argv) {
 
     request req;
 
-    server_pipe_path = argv[1];
+    strcpy(named_server_pipe, argv[1]);
 
     // Remove server pipe if it exists
-    if (unlink(server_pipe_path) != 0 && errno != ENOENT) {
+    if (unlink(named_server_pipe) != 0 && errno != ENOENT) {
         fprintf(stderr, "[ERR]: server unlink(%s) failed: %s\n", argv[2],
                 strerror(errno));
         exit(EXIT_FAILURE);
     }
 
     // Creates the server's named pipe
-    if (mkfifo(server_pipe_path, 0640) != 0) {
+    if (mkfifo(named_server_pipe, 0640) != 0) {
         fprintf(stderr, "[ERR]: server mkfifo failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-
-    // Opens server pipe for reading
-    if ((pipe_server = open(server_pipe_path, O_RDONLY)) == -1) {
-        fprintf(stderr, "[ERR]: manager open failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
+    
+    
     while (true) {
-        /* Opens and closes a dummy pipe to avoid having active wait */
-        int tmp_pipe = open(server_pipe_path, O_RDONLY);
-        if (tmp_pipe == -1) {
-            if (errno == ENOENT) {
-                /* If pipe doesn't exist, it means we've exited */
-                return 0;
-            }
+        // Opens server pipe for reading
+        if ((pipe_server = open(named_server_pipe, O_RDONLY)) == -1) {
             fprintf(stderr, "[ERR]: server open failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
-        close(tmp_pipe);
 
         if (read(pipe_server, &req, sizeof(request)) != sizeof(request)) {
-            fprintf(stderr, "[ERR]: manager read failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERR]: server read failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
 
@@ -92,14 +112,11 @@ int main(int argc, char **argv) {
                 break;
         }
     }
-
-    return 0;
 }
 
 void register_publisher(request req) {
     int fhandle = 0;
     int pipe_publisher;
-    char *publisher_pipe_path;
     ssize_t ret;
     ssize_t bytes_written;
     unsigned long box_index = mailbox_alloc; // impossible value
@@ -130,7 +147,7 @@ void register_publisher(request req) {
         char box_name_path[33] = "/";
         strcat(box_name_path, req.u_box_name.box_name);
 
-        if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
+        if ((fhandle = tfs_open(box_name_path, TFS_O_APPEND)) == -1) {
             resp.u_return_code.return_code = -1;
             strcpy(resp.u_response_message.error_message, "[ERR]: publisher could not find the mailbox's file\n");
         } else {
@@ -138,7 +155,6 @@ void register_publisher(request req) {
             memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
         }
     }
-
     if ((pipe_publisher = open(publisher_pipe_path, O_WRONLY)) == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -147,43 +163,47 @@ void register_publisher(request req) {
         fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    
     if (resp.u_return_code.return_code == -1) {
         close(pipe_publisher);
         return;
     }
+    close(pipe_publisher);
     
     mailboxes[box_index].n_publishers = 1;
+
+    
+    
+    if ((pipe_publisher = open(publisher_pipe_path, O_RDONLY)) == -1) {
+        fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
     while (true) {
         if (strcmp(mailboxes[box_index].box_name, "") == 0)
             // Box has beem removed by manager
             break;
-        
-        if ((ret = read(pipe_server, &req, sizeof(request))) != sizeof(request)) {
-            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-        }
-        if (ret == 0) {
+        if ((ret = read(pipe_publisher, &req, sizeof(request))) != sizeof(request)) {
+            if (ret != 0) {
+                fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+            }
             // ret == 0 indicates EOF
-            fprintf(stderr, "[INFO]: pipe closed\n");
+            fprintf(stderr, "[INFO]: publisher closed\n");
             break;
-        } else if (ret == -1) {
-            // ret == -1 indicates error
-            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
-            break;
-        }
-
-        bytes_written = tfs_write(fhandle, req.u_publisher_message.message, sizeof(req.u_publisher_message.message));
+        } 
+        strcat(req.u_publisher_message.message,"\n");
+        bytes_written = tfs_write(fhandle, req.u_publisher_message.message, strlen(req.u_publisher_message.message));
         mailboxes[box_index].box_size += (uint64_t) bytes_written;
         mailboxes[box_index].n_messages += 1;
+        fprintf(stdout,"exit: %s", req.u_publisher_message.message);
     }
+    mailboxes[box_index].n_publishers = 0;
     tfs_close(fhandle);
-    close(pipe_publisher);
+    close(pipe_server);
 }
 
 void register_subscriber(request req) {
     int fhandle = 0;
-    int pipe_subscriber;
+    int pipe_subscriber = 0;
     unsigned long box_index = mailbox_alloc; // impossible value
     ssize_t ret;
     char message_buffer[MESSAGE_SIZE];
@@ -199,10 +219,9 @@ void register_subscriber(request req) {
             }
         }
     }
-
     resp.op_code = OP_CODE_REG_SUBSCRIBER_ANS;
 
-    if (box_index == mailbox_alloc ) {
+    if (box_index == mailbox_alloc) {
         resp.u_return_code.return_code = -1;
         strcpy(resp.u_response_message.error_message, "[ERR]: subscriber's mailbox does not exist\n");
     } else {
@@ -217,7 +236,6 @@ void register_subscriber(request req) {
             memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
         }
     }
-
     if ((pipe_subscriber = open(req.u_client_pipe_path.client_pipe_path, O_WRONLY)) == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -226,21 +244,28 @@ void register_subscriber(request req) {
             fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
     }
-
     if (resp.u_return_code.return_code == -1) {
         close(pipe_subscriber);
         return;
     }
+    close(pipe_subscriber);
 
     mailboxes[box_index].n_subscribers += 1;
 
-    while (true) {
-        if (strcmp(mailboxes[box_index].box_name, "") == 0)
-            // Box has beem removed by manager
-            break;
+    if ((pipe_subscriber = open(req.u_client_pipe_path.client_pipe_path, O_WRONLY)) == -1) {
+        fprintf(stderr, "[ERR]: sub open failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-        tfs_read(fhandle, message_buffer, sizeof(message_buffer));
-        
+    while (true) {
+
+        ret = tfs_read(fhandle, message_buffer, sizeof(message_buffer)-1);
+        if (ret == 0 || ret == -1) {
+            // ret == -1 indicates EOF
+            fprintf(stderr, "[INFO]: end of file\n");
+            break;
+        }
+        fprintf(stdout,"%s", message_buffer);
         strcpy(resp.u_response_message.message,message_buffer);
         
         if ((ret = write(pipe_subscriber, &resp, sizeof(response))) != sizeof(response)) {
@@ -249,7 +274,7 @@ void register_subscriber(request req) {
         }
         if (ret == 0) {
             // ret == 0 indicates EOF
-            fprintf(stderr, "[INFO]: pipe closed\n");
+            fprintf(stderr, "[INFO]: subscriber closed\n");
             break;
         } else if (ret == -1) {
             // ret == -1 indicates error
@@ -267,7 +292,7 @@ void op_create_mailbox(request req) {
     int fhandle;
 
     response resp;
-    resp.op_code = OP_CODE_RM_MAILBOX_ANS;
+    resp.op_code = OP_CODE_CREAT_MAILBOX_ANS;
 
     bool box_already_exists = false;
     long free_mailbox_index = -1;
@@ -352,6 +377,7 @@ void op_create_mailbox(request req) {
     }
 
     close(pipe_client);
+    fprintf(stderr, "[INFO]: manager create closed\n");
 }
 
 void op_remove_mailbox(request req) {
