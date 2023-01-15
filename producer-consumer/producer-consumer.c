@@ -2,8 +2,7 @@
 #include "common.h"
 
 int pcq_create(pc_queue_t *queue, size_t capacity) {
-    // the buffer alloc might be wrong
-    queue->pcq_buffer = malloc(sizeof *queue->pcq_buffer * queue->pcq_capacity);
+    queue->pcq_buffer = malloc(sizeof(pthread_t) * queue->pcq_capacity);
     queue->pcq_capacity = capacity;
     queue->pcq_current_size = 0;
     queue->pcq_head = 0;
