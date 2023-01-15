@@ -29,7 +29,7 @@ static void sig_handler(int sig) {
         // Caught SIGQUIT
         close(pipe_server);
         close(pipe_publisher);
-        unlink(subscriber_pipe_path);
+        unlink(publisher_pipe_path);
         
         exit(EXIT_SUCCESS);
     }
@@ -118,6 +118,6 @@ int main(int argc, char **argv) {
         }
         close(pipe_publisher);
         close(pipe_server);
-        unlink(pipe_publisher);
+        unlink(publisher_pipe_path);
     }
 }

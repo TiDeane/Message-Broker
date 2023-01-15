@@ -99,9 +99,10 @@ int main(int argc, char **argv) {
 void register_publisher(request req) {
     int fhandle = 0;
     int pipe_publisher;
+    char *publisher_pipe_path;
     ssize_t ret;
     ssize_t bytes_written;
-    unsigned int box_index = mailbox_alloc; // impossible value
+    unsigned long box_index = mailbox_alloc; // impossible value
     response resp;
 
     publisher_pipe_path = req.u_client_pipe_path.client_pipe_path;
@@ -155,6 +156,9 @@ void register_publisher(request req) {
     mailboxes[box_index].n_publishers = 1;
 
     while (true) {
+        if (strcmp(mailboxes[box_index].box_name, "") == 0)
+            // Box has beem removed by manager
+            break;
         
         if ((ret = read(pipe_server, &req, sizeof(request))) != sizeof(request)) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
@@ -170,7 +174,7 @@ void register_publisher(request req) {
         }
 
         bytes_written = tfs_write(fhandle, req.u_publisher_message.message, sizeof(req.u_publisher_message.message));
-        mailboxes[box_index].box_size += bytes_written;
+        mailboxes[box_index].box_size += (uint64_t) bytes_written;
         mailboxes[box_index].n_messages += 1;
     }
     tfs_close(fhandle);
@@ -178,9 +182,9 @@ void register_publisher(request req) {
 }
 
 void register_subscriber(request req) {
-    int fhandle;
+    int fhandle = 0;
     int pipe_subscriber;
-    int box_index = mailbox_alloc; // impossible value
+    unsigned long box_index = mailbox_alloc; // impossible value
     ssize_t ret;
     char message_buffer[MESSAGE_SIZE];
     response resp;
@@ -223,7 +227,7 @@ void register_subscriber(request req) {
             exit(EXIT_FAILURE);
     }
 
-    if (resp.u_return_code.return_code = -1) {
+    if (resp.u_return_code.return_code == -1) {
         close(pipe_subscriber);
         return;
     }
@@ -231,7 +235,10 @@ void register_subscriber(request req) {
     mailboxes[box_index].n_subscribers += 1;
 
     while (true) {
-        // verify box name
+        if (strcmp(mailboxes[box_index].box_name, "") == 0)
+            // Box has beem removed by manager
+            break;
+
         tfs_read(fhandle, message_buffer, sizeof(message_buffer));
         
         strcpy(resp.u_response_message.message,message_buffer);

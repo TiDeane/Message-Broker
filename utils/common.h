@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <signal.h>
 
 /* MAX LENGTH OF DIFFERENT MESSAGE ELEMENTS */
 #define CLIENT_PIPE_PATH_SIZE (256)
