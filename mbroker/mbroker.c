@@ -102,6 +102,9 @@ void register_publisher(request req) {
     ssize_t ret;
     ssize_t bytes_written;
     unsigned int box_index = mailbox_alloc; // impossible value
+    response resp;
+
+    publisher_pipe_path = req.u_client_pipe_path.client_pipe_path;
 
     for (unsigned long i = 0; i < mailbox_alloc; i++) {
         if (free_mailboxes[i] == true)
@@ -114,34 +117,46 @@ void register_publisher(request req) {
         }
     }
 
+    resp.op_code = OP_CODE_REG_PUBLISHER_ANS;
+
     if (box_index == mailbox_alloc ) {
-        printf("[ERR]: publisher's mailbox does not exist\n");
-        return;
+        resp.u_return_code.return_code = -1;
+        strcpy(resp.u_response_message.error_message, "[ERR]: publisher's mailbox does not exist\n");
     } else if (mailboxes[box_index].n_publishers == 1) {
-        printf("[ERR]: mailbox already has a publisher\n");
+        resp.u_return_code.return_code = -1;
+        strcpy(resp.u_response_message.error_message, "[ERR]: mailbox already has a publisher\n");
+    } else {
+        char box_name_path[33] = "/";
+        strcat(box_name_path, req.u_box_name.box_name);
+
+        if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
+            resp.u_return_code.return_code = -1;
+            strcpy(resp.u_response_message.error_message, "[ERR]: publisher could not find the mailbox's file\n");
+        } else {
+            resp.u_return_code.return_code = 0;
+            memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
+        }
+    }
+
+    if ((pipe_publisher = open(publisher_pipe_path, O_WRONLY)) == -1) {
+        fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    if (write(pipe_publisher, &resp, sizeof(response)) != sizeof(response)) {
+        fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    
+    if (resp.u_return_code.return_code == -1) {
+        close(pipe_publisher);
         return;
     }
     
     mailboxes[box_index].n_publishers = 1;
 
-    char box_name_path[33] = "/";
-    strcat(box_name_path, req.u_box_name.box_name);
-    // verify box name
-
-    publisher_pipe_path = req.u_client_pipe_path.client_pipe_path;
-
-    if ((pipe_publisher = open(publisher_pipe_path, O_RDONLY)) == -1) {
-        fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
-        printf("[ERR]: publisher could not find the mailbox's file\n");
-        return;
-    }
     while (true) {
         
-        if ((ret = read(pipe_publisher, &req, sizeof(request))) != sizeof(request)) {
+        if ((ret = read(pipe_server, &req, sizeof(request))) != sizeof(request)) {
             fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
         }
         if (ret == 0) {
@@ -181,25 +196,40 @@ void register_subscriber(request req) {
         }
     }
 
+    resp.op_code = OP_CODE_REG_SUBSCRIBER_ANS;
+
     if (box_index == mailbox_alloc ) {
-        printf("[ERR]: subscriber's mailbox does not exist\n");
-        return;
+        resp.u_return_code.return_code = -1;
+        strcpy(resp.u_response_message.error_message, "[ERR]: subscriber's mailbox does not exist\n");
+    } else {
+        char box_name_path[33] = "/";
+        strcat(box_name_path, req.u_box_name.box_name);
+
+        if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
+            resp.u_return_code.return_code = -1;
+            strcpy(resp.u_response_message.error_message, "[ERR]: subscriber could not find the mailbox's file\n");
+        } else {
+            resp.u_return_code.return_code = 0;
+            memset(resp.u_response_message.error_message, '\0', ERROR_MESSAGE_SIZE);
+        }
     }
-    mailboxes[box_index].n_subscribers += 1;
 
-    char box_name_path[33] = "/";
-    strcat(box_name_path, req.u_box_name.box_name);
-    // verify box name
-
-    if ((pipe_subscriber = open(req.u_client_pipe_path.client_pipe_path, O_RDONLY)) == -1) {
+    if ((pipe_subscriber = open(req.u_client_pipe_path.client_pipe_path, O_WRONLY)) == -1) {
         fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
+    if (write(pipe_subscriber, &resp, sizeof(response)) != sizeof(response)) {
+            fprintf(stderr, "[ERR]: write failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+    }
 
-    if ((fhandle = tfs_open(box_name_path, 0)) == -1) {
-        printf("[ERR]: subscriber could not find the mailbox's file\n");
+    if (resp.u_return_code.return_code = -1) {
+        close(pipe_subscriber);
         return;
     }
+
+    mailboxes[box_index].n_subscribers += 1;
+
     while (true) {
         // verify box name
         tfs_read(fhandle, message_buffer, sizeof(message_buffer));

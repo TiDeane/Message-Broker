@@ -17,40 +17,32 @@ static char *subscriber_pipe_path;
 static char *server_pipe_path;
 static char *box_name;
 
+static int messages_received = 0;
+
 request reqRegistry;
 response respMessage;
 
 static void sig_handler(int sig) {
-  static int count = 0;
+    // UNSAFE: This handler uses non-async-signal-safe functions (printf(),
+    // exit();)
+    if (sig == SIGINT) {
 
-  // UNSAFE: This handler uses non-async-signal-safe functions (printf(),
-  // exit();)
-  if (sig == SIGINT) {
-    // In some systems, after the handler call the signal gets reverted
-    // to SIG_DFL (the default action associated with the signal).
-    // So we set the signal handler back to our function after each trap.
-    //
-    unlink(subscriber_pipe_path);
-    if (signal(SIGINT, sig_handler) == SIG_ERR) {
-      exit(EXIT_FAILURE);
+        if (signal(SIGINT, sig_handler) == SIG_ERR) {
+            exit(EXIT_FAILURE);
+        }
+        // Caught SIGINT
+        fprintf(stdout, "%d\n", messages_received);
+        close(pipe_subscriber);
+        unlink(subscriber_pipe_path);
+        
+        exit(EXIT_SUCCESS);
     }
-    count++;
-    fprintf(stderr, "Caught SIGINT (%d)\n", count);
-    return; // Resume execution at point of interruption
-  }
-
-  // Must be SIGQUIT - print a message and terminate the process
-  fprintf(stderr, "Caught SIGQUIT - that's all folks!\n");
-  exit(EXIT_SUCCESS);
 }
 
 
 int main(int argc, char **argv) {
     
     if (signal(SIGINT, sig_handler) == SIG_ERR) {
-        exit(EXIT_FAILURE);
-    }
-     if (signal(SIGQUIT, sig_handler) == SIG_ERR) {
         exit(EXIT_FAILURE);
     }
 
@@ -78,7 +70,7 @@ int main(int argc, char **argv) {
 
     // Request Registry
     {
-        reqRegistry.op_code = 2;
+        reqRegistry.op_code = OP_CODE_REG_SUBSCRIBER;
         strcpy(reqRegistry.u_client_pipe_path.client_pipe_path, subscriber_pipe_path);
         strcpy(reqRegistry.u_box_name.box_name, box_name);
 
@@ -97,14 +89,22 @@ int main(int argc, char **argv) {
 
     // Read Response Messages
     { 
+        // Opens subscriber pipe to read messages sent by the server
+        // This waits for the server to open it for writing
+        if ((pipe_subscriber = open(subscriber_pipe_path, O_RDONLY)) == -1) {
+            fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        if (read(pipe_subscriber, &respMessage, sizeof(response)) != sizeof(response)) {
+            fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 
-        for (;;) {
-            // Opens subscriber pipe to read messages sent by the server
-            // This waits for the server to open it for writing
-            if ((pipe_subscriber = open(subscriber_pipe_path, O_RDONLY)) == -1) {
-                fprintf(stderr, "[ERR]: open failed: %s\n", strerror(errno));
-                exit(EXIT_FAILURE);
-            }
+        if (respMessage.u_return_code.return_code == -1)
+            // Request to create a new session was denied
+            exit(EXIT_FAILURE);
+
+        while (true) {
             // char buffer[MAX_CODE_10_SIZE];
             if (read(pipe_subscriber, &respMessage, sizeof(response)) != sizeof(response)) {
                 fprintf(stderr, "[ERR]: read failed: %s\n", strerror(errno));
@@ -118,11 +118,11 @@ int main(int argc, char **argv) {
                 exit(EXIT_FAILURE);
             }
 
-            fprintf(stderr, "[INFO]: received %zd B\n", ret);
             fprintf(stdout, "%s\n", respMessage.u_response_message.message);
-            close(pipe_subscriber);
+            messages_received++;
         }
     }
+    close(pipe_subscriber);
     unlink(subscriber_pipe_path);
 
     return 0;

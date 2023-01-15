@@ -28,7 +28,9 @@ enum {
     OP_CODE_LIST_MAILBOX = 7,
     OP_CODE_LIST_MAILBOX_ANS = 8,
     OP_CODE_PUBLISHER_SERVER_MESSAGE = 9,
-    OP_CODE_SERVER_PUBLISHER_MESSAGE = 10
+    OP_CODE_SERVER_PUBLISHER_MESSAGE = 10,
+    OP_CODE_REG_PUBLISHER_ANS = 11,
+    OP_CODE_REG_SUBSCRIBER_ANS = 12
 };
 
 typedef struct {
@@ -63,18 +65,18 @@ typedef struct {                                /* Response (server --> client) 
 
     union {
         char message[MESSAGE_SIZE];             /* op_code 9 or 10 */
-        char error_message[ERROR_MESSAGE_SIZE]; /* op_code 4 or 6 */
+        char error_message[ERROR_MESSAGE_SIZE]; /* op_code 4, 6, 11 or 12 */
         struct {};                              /* op_code 8 */
     } u_response_message;
 
     union {
-        int32_t return_code;                    /* op_code 4 or 6*/
+        int32_t return_code;                    /* op_code 4, 6, 11 or 12*/
         struct {};                              /* op_code 8, 9 or 10 */
     } u_return_code;
 
     union {
         box_listing box_listing;                /* op_code 8 */
-        struct {};                              /* op_code 4, 6, 9 or 10 */
+        struct {};                              /* op_code 4, 6, 9, 10, 11 or 12 */
     } u_box_listing;
 } response;
 
