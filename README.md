@@ -308,29 +308,3 @@ fprintf(stdout, "NO BOXES FOUND\n");
 ### 3.5 Espera Ativa
 
 No projeto, **nunca** devem ser usados mecanismos de espera ativa.
-
-## 4. Sugestão de implementação
-
-Sugere-se que implementem o projeto através dos seguintes passos:
-
-1. Implementar as interfaces de linha de comando (CLI) dos clientes;
-2. Implementar a serialização do protocolo de comunicação;
-3. Implementar uma versão básica do `mbroker`, onde só existe uma _thread_ que, em ciclo, a) recebe um pedido de registo; b) trata a sessão correspondente; e c) volta a ficar à espera do pedido de registo;
-4. Implementar a fila produtor-consumidor;
-5. Utilizar a fila produtor-consumidor para gerir e encaminhar os pedidos de registo para as _worker threads_.
-
-## 5. Submissão e avaliação
-
-A submissão é feita através do Fénix **até sexta-feira, dia 13/Janeiro/2023, às 20h00**.
-
-Os estudantes devem submeter um ficheiro no formato `zip` com o código fonte e o ficheiro `Makefile`.
-O arquivo submetido não deve incluir outros ficheiros (tais como binários).
-Além disso, o comando `make clean` deve limpar todos os ficheiros resultantes da compilação do projeto, bem como o comando `make fmt`, para formatar automaticamente o código.
-
-Recomendamos que os alunos se assegurem que o projeto compila/corre corretamente no [ambiente de referência](https://github.com/tecnico-so/lab_ambiente).
-Ao avaliar os projetos submetidos, em caso de dúvida sobre o funcionamento do código submetido, os docentes usarão o ambiente de referência para fazer a validação final.
-O uso de outros ambientes para o desenvolvimento/teste do projeto (e.g., macOS, Windows/WSL) é permitido, mas o corpo docente não dará apoio técnico a dúvidas relacionadas especificamente com esses ambientes.
-
-A avaliação será feita de acordo com o método de avaliação descrito no Fénix
-
-_Bom trabalho!_
